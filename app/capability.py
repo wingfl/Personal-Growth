@@ -15,7 +15,7 @@ import re
 
 from .extract import ExtractError, parse_json_reply, render_prompt
 from .ids import now_iso, uuid7
-from .roles import INFERRED_STRENGTH, chain_text, implied_stages, role_of
+from .roles import INFERRED_STRENGTH, chain_text, implied_stages, pick_capability, role_of
 from .llm import LLMClient
 
 FRAMEWORK = "产品经理能力框架（自建 v1）"
@@ -216,8 +216,8 @@ def infer_chain(store, role=None, limit=None, dry_run=False):
         # 一句话的落点在最后一个命中阶段；补「它 + 前一环」两段，最像一个真实链路
         picked = matched[-2:] if len(matched) > 1 else matched[-1:]
         for stage, stage_caps in picked:
-            # 每个阶段固定取第一项能力：稳定、可预期，不会因为已覆盖就滑到下一个能力
-            code, name = stage_caps[0]
+            # 每个阶段按文本线索挑一项能力：稳定、可预期，不会因为已覆盖就滑到下一个
+            code, name = pick_capability(text, stage_caps)
             cap = caps.get(code)
             if not cap or (item["id"], cap["id"]) in covered:
                 continue

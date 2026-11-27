@@ -195,8 +195,10 @@ class TestRoleChain(BaseCase):
         self.add_item("投放活动上线并完成验收")
         out = infer_chain(self.store)
         Review(self.store).confirm_batch(job_id=out["job_id"])
-        rows = evidence(self.store, capabilities(self.store)[0]["id"])
-        rows = [row for row in rows if row.get("is_fact") == 0]
+        rows = []
+        for cap in capabilities(self.store):
+            rows.extend(row for row in evidence(self.store, cap["id"])
+                        if row.get("is_fact") == 0)
         self.assertTrue(rows)
         self.assertEqual(0, rows[0]["is_fact"])
         self.assertIn("推断", rows[0]["statement"])
