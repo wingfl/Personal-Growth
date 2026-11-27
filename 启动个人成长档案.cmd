@@ -1,21 +1,41 @@
 @echo off
-chcp 65001 >nul
-title ä¸ªäººæˆé•¿æ¡£æ¡ˆ
+setlocal
+title ¸öÈË³É³¤µµ°¸
 cd /d "%~dp0"
 
 where python >nul 2>nul
-if errorlevel 1 (
-  echo.
-  echo   æ²¡æœ‰æ‰¾åˆ° pythonï¼Œè¯·å…ˆå®‰è£… Python 3.10+ å¹¶å‹¾é€‰ "Add to PATH"ã€‚
-  echo.
-  pause
-  exit /b 1
-)
+if errorlevel 1 goto nopython
 
-echo æ­£åœ¨å¯åŠ¨ä¸ªäººæˆé•¿æ¡£æ¡ˆï¼Œç¨åä¼šè‡ªåŠ¨æ‰“å¼€æµè§ˆå™¨â€¦â€¦
+python -c "import sys; sys.exit(0 if sys.version_info>=(3,10) else 1)" >nul 2>nul
+if errorlevel 1 goto oldpython
+
+echo.
+echo   ÕıÔÚÆô¶¯¸öÈË³É³¤µµ°¸¡­¡­
+echo   ä¯ÀÀÆ÷»á×Ô¶¯´ò¿ª£»¹Ø±ÕÕâ¸ö´°¿Ú¼´Í£Ö¹·şÎñ¡£
+echo.
 python tools\launch_ui.py
-if errorlevel 1 (
-  echo.
-  echo   å¯åŠ¨å¤±è´¥ï¼Œé”™è¯¯ä¿¡æ¯è§ä¸Šæ–¹ã€‚æŒ‰ä»»æ„é”®å…³é—­ã€‚
-  pause
-)
+if errorlevel 1 goto failed
+exit /b 0
+
+:nopython
+echo.
+echo   Ã»ÓĞÕÒµ½ python¡£Çë°²×° Python 3.10+£¬°²×°Ê±¹´Ñ¡ "Add python.exe to PATH"¡£
+echo   ÏÂÔØµØÖ·£ºhttps://www.python.org/downloads/
+echo.
+pause
+exit /b 1
+
+:oldpython
+echo.
+echo   Python °æ±¾¹ıµÍ£¬ĞèÒª 3.10 ¼°ÒÔÉÏ¡£µ±Ç°°æ±¾£º
+python -V
+echo.
+pause
+exit /b 1
+
+:failed
+echo.
+echo   Æô¶¯Ê§°Ü£¬Ô­Òò¼ûÉÏ·½¡£°´ÈÎÒâ¼ü¹Ø±Õ¡£
+echo.
+pause
+exit /b 1

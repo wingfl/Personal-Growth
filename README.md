@@ -103,7 +103,8 @@ python tools/migrate_db.py --all   # 模型加了字段后，给已有库补列�
 ## 本地界面（只读）
 
 **一键启动**：双击根目录的 `启动个人成长档案.cmd`（缺依赖会自动 `npm install`/构建，端口被占用会顺延，
-结束后台窗口即关闭）。也可以手工：
+关闭窗口即停止服务）。该脚本用 **GBK 编码**保存——中文 Windows 的 cmd 按本地代码页读取批处理，
+若存成 UTF-8 会变成乱码并「闪退」，改动时请保持 GBK。也可以手工：
 
 ```bash
 cd web && npm install && npm run build     # 首次或前端改动后
