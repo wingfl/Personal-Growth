@@ -148,7 +148,7 @@ if __name__ == "__main__":
 
 
 class TestRoleChain(BaseCase):
-    """一句话里程碑按岗位链路补出隐含环节——只能以「推断」出现，不能冒充事实。"""
+    """一句话里程碑按岗位链路补出常规环节——计入本人能力，但保留补全依据。"""
 
     def setUp(self):
         super().setUp()
@@ -182,23 +182,23 @@ class TestRoleChain(BaseCase):
         rows = self.store.query(
             "SELECT proposed_payload FROM change_proposal WHERE status = 'pending'")
         payload = json.loads(rows[0]["proposed_payload"])
-        self.assertEqual(0, payload["is_fact"])
+        self.assertEqual(1, payload["is_fact"])
         self.assertEqual(2, payload["strength"])
-        self.assertIn("岗位链路推断", payload["fact_basis"])
+        self.assertIn("岗位常规环节", payload["fact_basis"])
         self.assertEqual(item_id, payload["target_id"])
 
         # 再跑一次不应重复生成
         again = infer_chain(self.store)
         self.assertEqual(0, again["proposals"])
 
-    def test_confirmed_inference_is_marked_not_fact(self):
+    def test_confirmed_chain_counts_as_my_capability(self):
         self.add_item("投放活动上线并完成验收")
         out = infer_chain(self.store)
         Review(self.store).confirm_batch(job_id=out["job_id"])
         rows = []
         for cap in capabilities(self.store):
             rows.extend(row for row in evidence(self.store, cap["id"])
-                        if row.get("is_fact") == 0)
+                        if row.get("is_fact") == 1 and "岗位常规环节" in (row.get("fact_basis") or ""))
         self.assertTrue(rows)
-        self.assertEqual(0, rows[0]["is_fact"])
-        self.assertIn("推断", rows[0]["statement"])
+        self.assertEqual(1, rows[0]["is_fact"])
+        self.assertNotIn("推断", rows[0]["statement"])

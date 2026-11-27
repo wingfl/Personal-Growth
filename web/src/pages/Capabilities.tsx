@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { ArrowUpRight, BadgeCheck, Quote } from "lucide-react";
-import { useApi, type Capability, type CapabilitiesPayload } from "@/lib/api";
+import { useApi, type CapabilitiesPayload } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,29 +26,27 @@ function StrengthDots({ value }: { value: number | null }) {
   );
 }
 
-function radarOption(items: Capability[], withInferred: boolean) {
-  const fact = {
-    value: items.map((item) => (item.fact_count ? item.fact_avg_strength : null)),
-    name: "原文证据",
-    itemStyle: { color: "#4f46e5" },
-    areaStyle: { color: "rgba(79,70,229,.16)" },
-    lineStyle: { color: "#4f46e5", width: 2 },
-  };
-  const all = {
-    value: items.map((item) => (item.evidence_count ? item.avg_strength : null)),
-    name: "含岗位链路推断",
-    itemStyle: { color: "#d97706" },
-    areaStyle: { color: "rgba(217,119,6,.10)" },
-    lineStyle: { color: "#d97706", width: 2, type: "dashed" },
-  };
+type Dim = { name: string; avg_strength: number | null };
+
+function compareOption(items: Dim[], demand: { items: { name: string; share: number }[] }) {
+  const share = new Map(demand.items.map((item) => [item.name, item.share]));
   return {
-    tooltip: { trigger: "item" },
-    legend: withInferred
-      ? { bottom: 0, itemWidth: 12, itemHeight: 8, textStyle: { color: "#71717a", fontSize: 13 } }
-      : undefined,
+    tooltip: {
+      trigger: "item",
+      formatter: (p: { name: string; value: number[] }) =>
+        p.name === "我的能力"
+          ? `${p.name}：强度 ${(p.value[0] / 20).toFixed(1)} / 5`
+          : `${p.name}：${Math.round(p.value[0])}% 的岗位要求`,
+    },
+    legend: {
+      bottom: 0,
+      itemWidth: 12,
+      itemHeight: 8,
+      textStyle: { color: "#71717a", fontSize: 13 },
+    },
     radar: {
-      radius: "68%",
-      indicator: items.map((item) => ({ name: item.name, max: 5 })),
+      radius: "66%",
+      indicator: items.map((item) => ({ name: item.name, max: 100 })),
       axisName: { color: "#71717a", fontSize: 13 },
       splitLine: { lineStyle: { color: "rgba(128,128,128,.22)" } },
       splitArea: { areaStyle: { color: ["rgba(128,128,128,.03)", "rgba(128,128,128,.07)"] } },
@@ -58,7 +56,22 @@ function radarOption(items: Capability[], withInferred: boolean) {
       {
         type: "radar",
         symbolSize: 6,
-        data: withInferred ? [fact, all] : [fact],
+        data: [
+          {
+            name: "下一档岗位要求",
+            value: items.map((item) => share.get(item.name) ?? 0),
+            itemStyle: { color: "#d97706" },
+            areaStyle: { color: "rgba(217,119,6,.12)" },
+            lineStyle: { color: "#d97706", width: 2, type: "dashed" },
+          },
+          {
+            name: "我的能力",
+            value: items.map((item) => (item.avg_strength ? item.avg_strength * 20 : null)),
+            itemStyle: { color: "#4f46e5" },
+            areaStyle: { color: "rgba(79,70,229,.16)" },
+            lineStyle: { color: "#4f46e5", width: 2 },
+          },
+        ],
       },
     ],
   };
@@ -71,7 +84,7 @@ export function Capabilities() {
   if (error) return <ErrorState message={error} onRetry={reload} />;
   if (!data) return null;
 
-  const { summary, categories } = data;
+  const { summary, categories, demand } = data;
   const items = categories.flatMap((group) => group.capabilities);
   const hasEvidence = summary.evidence_total > 0;
 
@@ -91,35 +104,6 @@ export function Capabilities() {
         </Button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="p-6">
-          <div className="text-sm font-medium text-muted-foreground">覆盖能力</div>
-          <div className="num mt-1 text-3xl font-semibold">
-            {summary.covered}
-            <span className="ml-1 text-lg font-normal text-muted-foreground">
-              / {summary.capability_count}
-            </span>
-          </div>
-        </Card>
-        <Card className="p-6">
-          <div className="text-sm font-medium text-muted-foreground">已确认证据</div>
-          <div className="num mt-1 text-3xl font-semibold">{summary.evidence_total}</div>
-          <div className="mt-2 text-sm text-muted-foreground">
-            原文 {summary.fact_total} · 链路推断 {summary.inferred_total}
-          </div>
-        </Card>
-        <Card className="p-6">
-          <div className="text-sm font-medium text-muted-foreground">平均证据强度</div>
-          <div className="num mt-1 text-3xl font-semibold">
-            {(summary.fact_avg_strength ?? summary.avg_strength)?.toFixed(1) ?? "—"}
-            <span className="ml-1 text-lg font-normal text-muted-foreground">/ 5</span>
-          </div>
-          <div className="mt-2 text-sm text-muted-foreground">
-            含推断后 {summary.avg_strength ? summary.avg_strength.toFixed(1) : "—"}
-          </div>
-        </Card>
-      </div>
-
       {!hasEvidence ? (
         <Card className="p-6">
           <EmptyState
@@ -130,37 +114,24 @@ export function Capabilities() {
         </Card>
       ) : (
         <>
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <div>
-                  <CardTitle>能力维度</CardTitle>
-                  <CardDescription>
-                    实线是原文证据的强度；虚线是按岗位链路补出的推断（1–5），空值表示还没有证据
-                  </CardDescription>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <EChart option={radarOption(items, summary.inferred_total > 0)} height={360} />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <div>
-                  <CardTitle>画像怎么来的</CardTitle>
-                  <CardDescription>证据只从已确认记录派生</CardDescription>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3 pt-0 text-sm text-muted-foreground">
-                <p>1. 周报、月报先入库并提取成事项，人工确认。</p>
-                <p>2. 标注作业把事项映射到能力词典，产出证据建议；每条都带原文引用。</p>
-                <p>3. 确认后的证据才计入画像，AI 不会直接改写能力评价。</p>
-                <p>4. 只写「完成评审并推进」这类里程碑时，系统按岗位链路补出调研、PRD、方案、验收等隐含环节，标记为推断，与原文证据分开显示。</p>
-                <p className="pt-1 text-foreground/80">{data.level_scale}</p>
-              </CardContent>
-            </Card>
-          </div>
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>我和下一档位的差距</CardTitle>
+                <CardDescription>
+                  实线是我的证据强度（1–5 折算成百分比），虚线是薪资 P75 以上岗位（{demand.postings} 条样本）
+                  要求该项能力的占比；两项都是 0–100，看形状差在哪一维
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {demand.items.length ? (
+                <EChart option={compareOption(items, demand)} height={380} />
+              ) : (
+                <EmptyState title="还没有足够的岗位样本" description="先跑一次采集并入库，这里会显示下一档位的能力要求。" icon={<BadgeCheck className="h-6 w-6" />} />
+              )}
+            </CardContent>
+          </Card>
 
           <div className="space-y-6">
             {categories.map((group) => (
@@ -178,9 +149,6 @@ export function Capabilities() {
                           <Badge variant={item.evidence_count ? "info" : "muted"}>
                             {item.evidence_count ? `${item.evidence_count} 条` : "待积累"}
                           </Badge>
-                          {item.inferred_count > 0 && (
-                            <Badge variant="muted">推断 {item.inferred_count}</Badge>
-                          )}
                         </div>
                       </div>
                       <div className="mt-4 flex items-center justify-between gap-3">
@@ -196,11 +164,7 @@ export function Capabilities() {
                             <span>{item.recent[0].statement}</span>
                           </div>
                           <div className="mt-1 flex items-center gap-2 pl-5 text-xs text-muted-foreground">
-                            {item.recent[0].is_fact === 0 && <Badge variant="muted">推断</Badge>}
-                            <span className="truncate">
-                              {item.recent[0].is_fact === 0 ? "依据：" : "原文："}
-                              {item.recent[0].strength_basis}
-                            </span>
+                            <span className="truncate">原文：{item.recent[0].strength_basis}</span>
                           </div>
                         </div>
                       )}

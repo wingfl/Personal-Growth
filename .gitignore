@@ -41,3 +41,6 @@ web/node_modules/
 web/dist/
 data/market/
 collector/node_modules/
+
+# BOSS 登录态（含 cookie，不要入库）
+data/browser-profile*/

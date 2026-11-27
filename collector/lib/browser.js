@@ -17,11 +17,13 @@ function findEdge() {
   throw new Error("找不到 Microsoft Edge，可用环境变量 EDGE_PATH 指定");
 }
 
-async function launch({ headless = true } = {}) {
+async function launch({ headless = true, profile = "" } = {}) {
   const executablePath = process.env.EDGE_PATH || findEdge();
   return puppeteer.launch({
     executablePath,
     headless: headless ? "new" : false,
+    // 传 profile 时复用同一个浏览器配置目录：登录一次，后续都带 cookie 跑
+    ...(profile ? { userDataDir: path.resolve(profile) } : {}),
     args: [
       "--no-sandbox",
       "--disable-blink-features=AutomationControlled",

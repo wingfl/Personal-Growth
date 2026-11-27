@@ -197,6 +197,11 @@ export type CapabilitiesPayload = {
     avg_strength: number | null;
     fact_avg_strength: number | null;
   };
+  demand: {
+    postings: number;
+    p75: number | null;
+    items: { code: string; name: string; postings: number; share: number }[];
+  };
   categories: { name: string; capabilities: Capability[] }[];
   items: Capability[];
 };

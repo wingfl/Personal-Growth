@@ -721,15 +721,15 @@ def _capability(args):
                                  dry_run=args.dry_run)
             print("岗位链路：%s" % result["chain"])
             if args.dry_run:
-                print("干跑：%d 条事项可补 %d 条推断证据" % (result["items"], result["proposals"]))
+                print("干跑：%d 条事项可补 %d 条能力证据" % (result["items"], result["proposals"]))
             elif result["proposals"]:
-                print("✓ 生成 %d 条推断建议（is_fact=0），分布：" % result["proposals"])
+                print("✓ 生成 %d 条能力证据建议（计入本人能力），分布：" % result["proposals"])
                 for stage, count in result["by_stage"].items():
                     print("  %s：%d" % (stage, count))
                 print("  作业 %s" % result["job_id"])
                 print("  确认：python -m app.cli ai confirm --job %s" % result["job_id"])
             else:
-                print("没有需要补的推断证据")
+                print("没有需要补的能力证据")
         elif args.action == "map":
             client = LLMClient(resolve_config(model=args.model))
             mapper = CapabilityMapper(store, client)

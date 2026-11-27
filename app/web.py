@@ -443,7 +443,26 @@ class Api:
             "categories": [{"name": name, "capabilities": items}
                            for name, items in groups.items()],
             "items": rows,
+            "demand": self._capability_demand(),
         }
+
+    def _capability_demand(self):
+        """P75 以上岗位最常要求的能力，按出现占比排序。"""
+        from .market import CAPABILITY_NAMES, _load, _mid, _percentile, requirements_of
+        rows = _load(self.store)
+        mids = sorted([x for x in (_mid(r) for r in rows) if x])
+        p75 = _percentile(mids, 0.75) if mids else None
+        high = [r for r in rows if _mid(r) and p75 and _mid(r) >= p75]
+        counter = {}
+        for row in high:
+            for code, _needle in requirements_of(row):
+                counter[code] = counter.get(code, 0) + 1
+        items = [{"code": code, "name": CAPABILITY_NAMES.get(code, code),
+                  "postings": n,
+                  "share": round(n * 100.0 / len(high), 1) if high else 0}
+                 for code, n in counter.items()]
+        items.sort(key=lambda item: -item["share"])
+        return {"postings": len(high), "p75": p75, "items": items}
 
     def market(self, city=None):
         """市场定位：我在样本里的位置、分档要求频次、与高薪样本的能力差距。"""

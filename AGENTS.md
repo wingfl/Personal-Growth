@@ -47,7 +47,7 @@ python tools\check_all.py                     # 质量闸门（9 步）
 4. `app/` 不允许 import 第三方库；`tests/test_engineering.py` 会检查依赖边界。
 5. Web 是**只读**入口：只有 GET API，写操作留在 CLI；监听 `127.0.0.1`。
 6. 页面只用 `web/src/index.css` 的 token 与 `components/ui/*`，不要逐页自定义颜色/字号。
-7. 数据必须可追溯：AI 产出的每条建议带 `quote`/`target_id`，确认后才写正式档案；推断证据 `is_fact=0`。
+7. 数据必须可追溯：AI 产出的每条建议带 `quote`/`target_id`，确认后才写正式档案；按岗位常规环节补全的证据 `is_fact=1`，`fact_basis` 注明「按岗位环节补全」。
 8. 提交前跑 `python tools/check_all.py`，并 `python tools/index_code.py build --changed` 更新索引（否则闸门第 8 步失败）。
 
 ## 常用命令
@@ -57,7 +57,7 @@ python -m app.cli import "飞书导出/周报月报-md" --recursive --year 2026
 python -m app.cli periods --year 2026 --dry-run
 python -m app.cli ai extract --approve            # 提取并批量确认
 python -m app.cli capability map --batch 25
-python -m app.cli capability infer --approve      # 按岗位链路补隐含环节（is_fact=0）
+python -m app.cli capability infer --approve      # 按岗位环节补隐含环节（计入本人能力）
 python -m app.cli project intro --all             # 生成项目介绍
 python -m app.cli goal add "目标名" --type capability --start 2026-12-01 --end 2027-03-31
 python -m app.cli profile set --title 产品经理 --set

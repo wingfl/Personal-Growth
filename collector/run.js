@@ -5,7 +5,8 @@
 const fs = require("fs");
 const path = require("path");
 const { launch } = require("./lib/browser");
-const { openSession, collectKeyword } = require("./adapters/51job");
+const job51 = require("./adapters/51job");
+const boss = require("./adapters/boss");
 
 function parseArgs(argv) {
   const out = {};
@@ -42,23 +43,28 @@ async function main() {
   const pageSize = Number(args["page-size"] || 50);
   const delayMs = Number(args.delay || 2500);
   const dryRun = Boolean(args["dry-run"]);
+  const sinceDays = Number(args["since-days"] || 0);
+  const platform = String(args.platform || "51job");
+  const profile = args.profile ? path.resolve(process.cwd(), args.profile) : path.join(__dirname, "..", "data", "browser-profile");
+  const adapter = platform === "boss" ? boss : job51;
+  const headless = !args.show;
   const outDir = path.resolve(__dirname, "..", "data", "market", "raw", weekTag());
   fs.mkdirSync(outDir, { recursive: true });
 
   const log = (msg) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${msg}`);
   log(`采集开始：${roles.join(" / ")} @ ${city}（${cityCode}），每方向 ${dryRun ? 1 : pages} 页`);
 
-  const browser = await launch({ headless: true });
+  const browser = await launch({ headless, profile: platform === "boss" ? profile : "" });
   const byId = new Map();
-  const meta = { week: weekTag(), city, city_code: cityCode, roles, pages: dryRun ? 1 : pages, started_at: new Date().toISOString(), sources: {} };
+  const meta = { week: weekTag(), city, city_code: cityCode, platform, roles, pages: dryRun ? 1 : pages, started_at: new Date().toISOString(), sources: {} };
 
-  let session = await openSession(browser, { keyword: roles[0], cityCode });
+  let session = await adapter.openSession(browser, { keyword: roles[0], cityCode });
   try {
     for (const role of roles) {
       log(`方向：${role}`);
       let res;
       try {
-        res = await collectKeyword(session, { keyword: role, cityCode, pages: dryRun ? 1 : pages, pageSize, delayMs, log });
+        res = await adapter.collectKeyword(session, { keyword: role, cityCode, pages: dryRun ? 1 : pages, pageSize, delayMs, log });
       } catch (err) {
         log(`  方向失败：${String(err).slice(0, 120)}`);
         meta.sources[role] = { total: null, pages: 0, fetched: 0, error: String(err).slice(0, 200) };
@@ -68,9 +74,9 @@ async function main() {
         // 偶尔会碰上会话失效：换一个新页面再试（旧页面不再复用）
         log("  该方向返回 0 条，重开会话后重试一次");
         const old = session;
-        session = await openSession(browser, { keyword: role, cityCode });
+        session = await adapter.openSession(browser, { keyword: role, cityCode });
         await old.close().catch(() => {});
-        res = await collectKeyword(session, { keyword: role, cityCode, pages: dryRun ? 1 : pages, pageSize, delayMs, log });
+        res = await adapter.collectKeyword(session, { keyword: role, cityCode, pages: dryRun ? 1 : pages, pageSize, delayMs, log });
       }
       meta.sources[role] = { total: res.total, pages: res.pages, fetched: res.items.length };
       for (const item of res.items) {
@@ -98,7 +104,7 @@ async function main() {
     log(`按 ${sinceDays} 天过滤：${before} → ${items.length} 条`);
   }
   const stamp = new Date().toISOString().slice(0, 10);
-  const outFile = path.join(outDir, `51job-${city}-${stamp}.jsonl`);
+  const outFile = path.join(outDir, `${platform}-${city}-${stamp}.jsonl`);
   fs.writeFileSync(outFile, items.map((x) => JSON.stringify(x)).join("\n") + (items.length ? "\n" : ""), "utf8");
   meta.finished_at = new Date().toISOString();
   meta.total_unique = items.length;

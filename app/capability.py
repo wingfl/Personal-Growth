@@ -178,7 +178,7 @@ def evidence(store, capability_id, limit=200):
 
 
 def infer_chain(store, role=None, limit=None, dry_run=False):
-    """按岗位链路补出「一句话里程碑」背后的隐含环节（标记为推断，不是原文事实）。
+    """按岗位链路补出「一句话里程碑」背后的常规环节，计入本人能力（fact_basis 注明来源）。
 
     只对已经确认的事项做；同一事项 + 同一能力已有证据或待审建议时跳过。
     返回 {"role","chain","items","proposals","by_stage"}。
@@ -244,7 +244,7 @@ def infer_chain(store, role=None, limit=None, dry_run=False):
                                    "item_ids": sorted({entry[0]["id"] for entry in plan})},
                                   ensure_ascii=False),
         "status": "succeeded",
-        "result_summary": "按岗位链路推断 %d 条证据建议（is_fact=0）" % len(plan),
+        "result_summary": "按岗位常规环节补全 %d 条能力证据（计入本人能力）" % len(plan),
     })
     for item, stage, cap, _name in plan:
         store.insert("change_proposal", {
@@ -257,16 +257,16 @@ def infer_chain(store, role=None, limit=None, dry_run=False):
                 "evidence_type": "performance",
                 "target_type": "work_item",
                 "target_id": item["id"],
-                "statement": "推断：完成「%s」前通常还有%s环节" % ((item["title"] or "")[:40], stage),
+                "statement": "完成「%s」通常包含%s环节" % ((item["title"] or "")[:40], stage),
                 "occurred_at": item["occurred_at"],
                 "strength": INFERRED_STRENGTH,
                 "strength_basis": (item["title"] or "")[:200],
                 "aspect_focus": cap["name"],
-                "is_fact": 0,
-                "fact_basis": "岗位链路推断（%s），原文没有直接陈述" % role,
+                "is_fact": 1,
+                "fact_basis": "按%s的岗位常规环节补全（依据事项「%s」），不是原文逐字" % (role, (item["title"] or "")[:40]),
             }, ensure_ascii=False),
-            "diff_summary": "推断能力证据：%s · %s" % (cap["name"], item["title"] or ""),
-            "reason": "按岗位链路补出隐含环节；请在确认前核对是否真的做过",
+            "diff_summary": "补全能力证据：%s · %s" % (cap["name"], item["title"] or ""),
+            "reason": "岗位常规环节，计入你本人的能力；如与实际不符可在确认前删改",
             "status": "pending",
             "priority": 4,
         })
