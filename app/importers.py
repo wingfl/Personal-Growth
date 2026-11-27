@@ -346,8 +346,13 @@ def infer_doc_type(filename):
     return "other"
 
 
-def infer_period(filename):
-    """从文件名推断资料覆盖的时间范围，返回 (start, end, date_precision)。"""
+def infer_period(filename, default_year=None):
+    """从文件名推断资料覆盖的时间范围，返回 (start, end, date_precision)。
+
+    default_year 只对「没写年份」的文件名生效（例如飞书导出的「工作周报（10月10）」）：
+    写成 `（10月10）` 的按该日期所在的 ISO 周算，写成 `（9月）` 的按整月算。
+    文件名里出现四位年份时一律以文件名为准，不吃 default_year。
+    """
     name = os.path.basename(filename)
     m = re.search(r"(20\d{2})\s*[-_年]?\s*[Qq季]\s*([1-4])", name)
     if m:
@@ -371,6 +376,23 @@ def infer_period(filename):
     if m:
         year = int(m.group(1))
         return date_iso(date(year, 1, 1)), date_iso(date(year, 12, 31)), "year"
+    if default_year:
+        # 「10月10」：按这一天所在的 ISO 周（周一~周日）归档，precision 记 week
+        m = re.search(r"(\d{1,2})\s*月\s*([0-3]?\d)\s*[日号]?", name)
+        if m and 1 <= int(m.group(1)) <= 12:
+            try:
+                anchor = date(int(default_year), int(m.group(1)), int(m.group(2)))
+            except ValueError:
+                anchor = None
+            if anchor is not None:
+                iso_year, iso_week, _ = anchor.isocalendar()
+                start, end = week_range(iso_year, iso_week)
+                return date_iso(start), date_iso(end), "week"
+        # 「9月」：整月
+        m = re.search(r"(\d{1,2})\s*月", name)
+        if m and 1 <= int(m.group(1)) <= 12:
+            start, end = month_range(int(default_year), int(m.group(1)))
+            return date_iso(start), date_iso(end), "month"
     return None, None, None
 
 
@@ -395,7 +417,7 @@ MIME_BY_EXT = {
 
 def import_file(store, path, doc_type=None, source_channel="file_upload",
                 duplicate_handling="skip", import_batch_id=None, title=None,
-                archive_attachment=True):
+                archive_attachment=True, default_year=None):
     """导入单个文件，返回结果字典。
 
     重复判定以 sha256 内容哈希为准；duplicate_handling 决定如何处理：
@@ -422,7 +444,7 @@ def import_file(store, path, doc_type=None, source_channel="file_upload",
     if not full_text.strip():
         raise ValueError("文件没有可入库的文本内容：%s" % path)
 
-    period_start, period_end, _precision = infer_period(path)
+    period_start, period_end, _precision = infer_period(path, default_year)
     doc_type = doc_type or infer_doc_type(path)
     title = title or os.path.splitext(os.path.basename(path))[0]
     version_no = (previous["version_no"] or 1) + 1 if (previous and duplicate_handling != "import_anyway") else 1
@@ -512,7 +534,8 @@ def _bump_duplicate(store, import_batch_id):
 def import_text(store, title, text, doc_type=None, source_channel="third_party_import",
                 duplicate_handling="skip", import_batch_id=None, period_start=None,
                 period_end=None, external_id=None, external_url=None,
-                external_updated_at=None, fmt="markdown", title_for_infer=None):
+                external_updated_at=None, fmt="markdown", title_for_infer=None,
+                default_year=None):
     """把外部来源（飞书云文档等）的正文导入为原始资料。
 
     判重优先按 external_id（同一篇外部文档重新拉取），其次按正文 sha256。
@@ -540,7 +563,7 @@ def import_text(store, title, text, doc_type=None, source_channel="third_party_i
 
     infer_name = title_for_infer or title
     if period_start is None and period_end is None:
-        period_start, period_end, _precision = infer_period(infer_name)
+        period_start, period_end, _precision = infer_period(infer_name, default_year)
     doc_type = doc_type or infer_doc_type(infer_name)
     version_no = ((previous["version_no"] or 1) + 1
                   if (previous and duplicate_handling != "import_anyway") else 1)

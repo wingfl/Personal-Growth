@@ -166,6 +166,12 @@ class TestImport(BaseCase):
         self.assertTrue(os.path.exists(stored), "附件副本应已落盘：%s" % stored)
         self.assertEqual(attachment["content_hash"], doc["content_hash"])
 
+    def test_import_file_uses_default_year(self):
+        path = self.write("工作周报（5月10）.md", SAMPLE_MD)
+        result = import_file(self.store, path, default_year=2026)
+        self.assertEqual(result["period_start"], "2026-05-04")
+        self.assertEqual(result["period_end"], "2026-05-10")
+
     def test_duplicate_skip_and_new_version(self):
         path = self.write("周报.md", SAMPLE_MD)
         first = import_file(self.store, path)
@@ -231,6 +237,18 @@ class TestInference(unittest.TestCase):
         self.assertEqual(precision, "week")
         self.assertEqual(start, "2024-01-29")
         self.assertEqual(end, "2024-02-04")
+
+    def test_infer_period_with_default_year(self):
+        # 飞书导出的文件名只写「10月10」，没有四位年份
+        start, end, precision = infer_period("工作周报（10月10）.md", 2026)
+        self.assertEqual((start, end, precision), ("2026-10-05", "2026-10-11", "week"))
+        self.assertEqual(infer_period("工作月报（9月）.md", 2026)[:2],
+                         ("2026-09-01", "2026-09-30"))
+        # 文件名里已有年份时不使用 default_year
+        self.assertEqual(infer_period("2024-03月报.md", 2026)[:2],
+                         ("2024-03-01", "2024-03-31"))
+        # 没有年份、也没有 default_year 时保持原行为
+        self.assertEqual(infer_period("工作周报（10月10）.md")[:2], (None, None))
 
 
 if __name__ == "__main__":

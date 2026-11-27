@@ -242,7 +242,16 @@ class Extraction:
         started = datetime.now(timezone.utc)
         try:
             reply = self.llm.chat(messages, temperature=temperature, max_tokens=max_tokens)
-            data = parse_json_reply(reply.text)
+            try:
+                data = parse_json_reply(reply.text)
+            except LLMError as exc:
+                # 推理型模型会把输出预算耗在推理上：被 length 截断时把预算翻倍重试一次，
+                # 仍失败才按 parse_failed 记作业失败（否则每篇周报都要手工加 --max-tokens）。
+                if exc.code != "parse_failed" or reply.finish_reason != "length":
+                    raise
+                budget = min((max_tokens or self.llm.config.max_tokens) * 2, 65536)
+                reply = self.llm.chat(messages, temperature=temperature, max_tokens=budget)
+                data = parse_json_reply(reply.text)
             batch_id = uuid7()
             period = {"start": doc.get("period_start"), "end": doc.get("period_end"),
                       "precision": precision_from_period(doc.get("period_start"),
@@ -458,7 +467,8 @@ class Extraction:
             if payload.get("date_precision") in (None, "", "unknown"):
                 if period.get("precision") not in (None, "", "unknown"):
                     payload["date_precision"] = period["precision"]
-        if raw.get("is_fact") is False:
+        # 只有带「事实/推断」字段组的实体才写 is_fact，否则会在写库时被判为未知字段
+        if "is_fact" in fields and raw.get("is_fact") is False:
             payload.setdefault("is_fact", 0)
         if pending:
             reason = (reason + "；" if reason else "") + "；".join(pending)
@@ -701,6 +711,11 @@ class Review:
         entity = proposal["target_entity_type"]
         change_type = proposal["change_type"]
         job_id = proposal.get("job_id")
+        if change_type in ("create", "update") and entity in self.model.entities:
+            # 模型偶尔给出该实体没有的字段：写库前剔除，避免整条建议因一个多余键失败
+            known = self.model.fields(entity)
+            for key in [k for k in payload if k not in known]:
+                payload.pop(key)
 
         # 写库前先按模型校验，避免把不完整的建议写进正式档案
         if change_type in ("create", "update"):
@@ -744,6 +759,79 @@ class Review:
         return {"proposal_id": proposal_id, "status": status, "entity": applied_entity,
                 "applied_entity_id": applied_id, "relinked": relinked}
 
+    def confirm_batch(self, job_id=None, batch_id=None, note=None, fill_missing=True,
+                      limit=2000, actor_type="user"):
+        """批量确认待审建议，供「提取后自动入库」使用。
+
+        能补齐的缺项先补（work_item 缺 occurred_at 时取资料期间的起点与精度），
+        补不齐的跳过并带回原因，不阻断其余建议；单条失败不影响整批。
+        """
+        rows = self.store.list("change_proposal", {"status": "pending"}, limit=limit,
+                               order_by="created_at ASC")
+        if job_id:
+            rows = [row for row in rows if row.get("job_id") == job_id]
+        if batch_id:
+            rows = [row for row in rows if row.get("batch_id") == batch_id]
+        confirmed, modified, failed = [], [], []
+        for row in rows:
+            overrides = self._auto_overrides(row) if fill_missing else {}
+            try:
+                result = self.confirm(row["id"], overrides=overrides or None,
+                                      note=note or "自动确认（缺项按资料期间补齐）",
+                                      actor_type=actor_type)
+            except ExtractError as exc:
+                failed.append({"proposal_id": row["id"],
+                               "entity": row.get("target_entity_type"),
+                               "change_type": row.get("change_type"),
+                               "reason": str(exc)})
+                continue
+            if result["status"] == "modified":
+                modified.append(row["id"])
+            else:
+                confirmed.append(row["id"])
+        return {"total": len(rows), "confirmed": len(confirmed), "modified": len(modified),
+                "failed": failed, "confirmed_ids": confirmed, "modified_ids": modified}
+
+    def _auto_overrides(self, proposal):
+        """自动补齐建议里缺的必填项：目前只有 work_item 的事发时间。"""
+        if proposal.get("change_type") != "create":
+            return {}
+        if proposal.get("target_entity_type") != "work_item":
+            return {}
+        payload = self._payload(proposal)
+        if payload.get("occurred_at"):
+            return {}
+        period = self._job_period(proposal.get("job_id"))
+        if not period.get("start"):
+            return {}
+        overrides = {"occurred_at": period["start"]}
+        if payload.get("date_precision") in (None, "", "unknown"):
+            overrides["date_precision"] = period["precision"]
+        return overrides
+
+    def _job_period(self, job_id):
+        """顺着作业的 input_scope 找到资料，取它记录的期间与精度。"""
+        if not job_id:
+            return {}
+        try:
+            job = self.store.get("ai_job", job_id)
+        except NotFound:
+            return {}
+        try:
+            scope = json.loads(job.get("input_scope") or "{}")
+        except ValueError:
+            return {}
+        document_id = scope.get("document_id")
+        if not document_id:
+            return {}
+        try:
+            doc = self.store.get("source_document", document_id)
+        except NotFound:
+            return {}
+        start, end = doc.get("period_start"), doc.get("period_end")
+        return {"start": start, "end": end,
+                "precision": precision_from_period(start, end)}
+
     def reject(self, proposal_id, note=None, actor_type="user"):
         proposal = self._require(proposal_id)
         if proposal["status"] not in ("pending",):
@@ -774,7 +862,8 @@ class Review:
             if "review_status" in self.model.fields(entity):
                 values["review_status"] = "confirmed"
                 values["reviewed_at"] = now_iso()
-            values.setdefault("is_fact", 1)
+            if "is_fact" in self.model.fields(entity):
+                values.setdefault("is_fact", 1)
             record = self.archive._insert(
                 entity, values, proposal_id=proposal_id, job_id=job_id, actor_type=actor_type,
                 remark=note or "由 AI 建议确认写入（内容来自模型，用户已确认）", commit=False)

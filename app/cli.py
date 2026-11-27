@@ -25,7 +25,7 @@ from .feishu_auth import (DEFAULT_PORT, DEFAULT_REDIRECT_URI, DEFAULT_SCOPES,
                           CodeReceiver, FeishuAuthError, UserAuth, authorize_url,
                           clear_user_tokens, exchange_code, store_tokens, user_info)
 from .feishu_import import FeishuSync, FeishuSyncError
-from .importers import import_path
+from .importers import import_path, infer_period
 from .llm import LLMClient, LLMError, dsh_home, resolve_config
 from .logging import get_logger, setup_logging
 from .model_meta import Model, ModelError, ValidationError
@@ -49,7 +49,7 @@ def _import(args):
             result = import_path(
                 store, target, recursive=args.recursive, batch_label=args.label,
                 doc_type=args.type, source_channel=args.channel,
-                duplicate_handling=args.handling,
+                duplicate_handling=args.handling, default_year=args.year,
             )
             if result["status"] == "imported":
                 print("✓ 导入 %s" % result["title"])
@@ -73,6 +73,34 @@ def _import(args):
                     else:
                         print("  ✓ %s（%d 片段）" % (item["title"], item["fragment_count"]))
         store.commit()
+    finally:
+        store.close()
+
+
+def _periods(args):
+    store = Store(args.db)
+    try:
+        rows = store.list("source_document", limit=10000, order_by="created_at ASC")
+        filled, skipped = [], []
+        for row in rows:
+            if row.get("period_start") and row.get("period_end"):
+                continue
+            start, end, precision = infer_period(row["title"], args.year)
+            if not start:
+                skipped.append(row["title"])
+                continue
+            filled.append((row["title"], start, end, precision))
+            if not args.dry_run:
+                store.update("source_document", row["id"],
+                             {"period_start": start, "period_end": end})
+        if not args.dry_run:
+            store.commit()
+        for title, start, end, precision in filled:
+            print("✓ %s → %s ~ %s（%s）" % (title, start, end, precision))
+        print("补全 %d 篇，未识别 %d 篇%s"
+              % (len(filled), len(skipped), "（预览模式，未写库）" if args.dry_run else ""))
+        for title in skipped:
+            print("  · 未识别：%s" % title)
     finally:
         store.close()
 
@@ -609,9 +637,18 @@ def _ai_extract(args):
         for pid in result["proposal_ids"]:
             row = store.get("change_proposal", pid)
             print("  · %s｜%s｜%s" % (pid, row["target_entity_type"], row["diff_summary"]))
-        print("\n下一步：python -m app.cli ai proposals 查看，"
-              "python -m app.cli ai show <建议ID> 看证据，"
-              "python -m app.cli ai confirm <建议ID> 写入档案")
+        if not args.approve:
+            print("\n下一步：python -m app.cli ai proposals 查看，"
+                  "python -m app.cli ai show <建议ID> 看证据，"
+                  "python -m app.cli ai confirm <建议ID> 写入档案")
+            return
+        outcome = Review(store).confirm_batch(job_id=result["job_id"], note=args.note)
+        print("\n== 自动确认 ==")
+        print("  待处理 %d 条：直接确认 %d，补齐后确认 %d，未通过 %d"
+              % (outcome["total"], outcome["confirmed"], outcome["modified"],
+                 len(outcome["failed"])))
+        for item in outcome["failed"][:20]:
+            print("  ✗ %s（%s）：%s" % (item["proposal_id"], item["entity"], item["reason"]))
     finally:
         store.close()
 
@@ -989,7 +1026,15 @@ def build_parser():
                    help="内容重复时的处理方式（默认 skip）")
     p.add_argument("--recursive", action="store_true", help="目录递归导入")
     p.add_argument("--label", help="导入批次名称")
+    p.add_argument("--year", type=int,
+                   help="文件名没写年份时用它推断期间（如 2026）")
     p.set_defaults(func=_import)
+
+    p = sub.add_parser("periods", help="按年份补全已导入资料的期间（文件名没写年份时用）")
+    p.add_argument("--year", type=int, required=True, help="用于推断的年份，如 2026")
+    p.add_argument("--dry-run", action="store_true", dest="dry_run",
+                   help="只预览补全结果，不写库")
+    p.set_defaults(func=_periods)
 
     p = sub.add_parser("docs", help="列出已导入的原始资料")
     p.add_argument("--limit", type=int, default=50)
@@ -1184,6 +1229,9 @@ def build_parser():
     q.add_argument("--trigger", default="manual", help="触发方式（默认 manual）")
     q.add_argument("--dry-run", action="store_true", dest="dry_run",
                    help="只打印将要发送的提示词，不调用模型、不写库")
+    q.add_argument("--approve", action="store_true",
+                   help="提取成功后立即批量确认本作业的建议")
+    q.add_argument("--note", help="批量确认时写入的审核备注")
     q.set_defaults(func=_ai_extract)
 
     q = ai.add_parser("jobs", help="查看 AI 作业记录")

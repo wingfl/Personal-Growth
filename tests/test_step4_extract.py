@@ -43,10 +43,13 @@ class FakeTransport:
         reply = self.replies.pop(0)
         if isinstance(reply, Exception):
             raise reply
+        finish_reason = "stop"
+        if isinstance(reply, tuple):   # (内容, finish_reason)：用于模拟被截断的回复
+            reply, finish_reason = reply
         content = reply if isinstance(reply, str) else json.dumps(reply, ensure_ascii=False)
         return {
             "model": "fake-model-1",
-            "choices": [{"message": {"content": content}, "finish_reason": "stop"}],
+            "choices": [{"message": {"content": content}, "finish_reason": finish_reason}],
             "usage": {"prompt_tokens": 120, "completion_tokens": 60, "total_tokens": 180},
         }
 
@@ -305,6 +308,76 @@ class TestExtraction(BaseCase):
         self.assertEqual(json.loads(proposal["final_payload"])["occurred_at"], "2024-03-20")
         item = self.store.get("work_item", outcome["applied_entity_id"])
         self.assertEqual(item["occurred_at"], "2024-03-20")
+
+    def test_truncated_reply_is_retried_with_doubled_budget(self):
+        # 推理型模型把预算花在推理上，回复被截断（finish_reason=length）：加大预算重试一次
+        llm, transport = fake_llm(('{"items": [{"title": "x"', "length"), self.reply())
+        extraction = self.seed_prompts(llm)
+        result = extraction.run(self.doc["id"], max_tokens=2048)
+        self.assertEqual(result["proposal_count"], 4)
+        self.assertEqual(len(transport.calls), 2)
+        self.assertEqual(transport.calls[0]["max_tokens"], 2048)
+        self.assertEqual(transport.calls[1]["max_tokens"], 4096)
+
+    def test_complete_but_broken_reply_is_not_retried(self):
+        llm, transport = fake_llm(("这不是 JSON", "stop"))
+        extraction = self.seed_prompts(llm)
+        with self.assertRaises(ExtractError) as ctx:
+            extraction.run(self.doc["id"], max_tokens=2048)
+        self.assertIn("parse_failed", str(ctx.exception))
+        self.assertEqual(len(transport.calls), 1)
+
+    def test_confirm_batch_confirms_created_item_with_period(self):
+        reply = self.reply(
+            items=[{"title": "整理指标口径", "item_type": "requirement_analysis",
+                    "content": "覆盖 12 个核心指标", "project": "客户数据平台建设",
+                    "my_role": "lead", "is_fact": True,
+                    "deliverables": "指标定义模板",
+                    "evidence": [{"fragment_id": self.f1,
+                                  "quote": "完成客户数据平台指标口径梳理，覆盖 12 个核心指标"}]}],
+            new_projects=[], link_existing=[])
+        extraction, result, _ = self.run_extract(reply)
+        outcome = Review(self.store, extraction=extraction).confirm_batch(
+            job_id=result["job_id"])
+        self.assertEqual((outcome["total"], outcome["confirmed"], len(outcome["failed"])),
+                         (1, 1, 0))
+        item = self.store.list("work_item", {"title": "整理指标口径"}, limit=1)[0]
+        self.assertEqual(item["occurred_at"], "2024-03-18")
+        self.assertEqual(item["date_precision"], "week")
+
+    def test_confirm_batch_fills_missing_occurred_at_from_job_period(self):
+        # 模型没给日期：按该建议所属资料的期间起点补齐
+        job = self.store.insert("ai_job", {
+            "job_type": "document_extract", "trigger_type": "manual",
+            "input_scope": json.dumps({"document_id": self.doc["id"]}),
+            "status": "succeeded"})
+        self.store.insert("change_proposal", {
+            "change_type": "create", "target_entity_type": "work_item", "job_id": job,
+            "proposed_payload": json.dumps({"title": "补日期的事项", "item_type": "development",
+                                            "content": "内容", "is_routine": False,
+                                            "is_follow_up_needed": False,
+                                            "date_precision": "unknown"}, ensure_ascii=False),
+            "diff_summary": "新建事项", "status": "pending", "priority": 3})
+        self.store.commit()
+        outcome = Review(self.store).confirm_batch(job_id=job)
+        self.assertEqual((outcome["total"], outcome["modified"], len(outcome["failed"])),
+                         (1, 1, 0))
+        item = self.store.list("work_item", {"title": "补日期的事项"}, limit=1)[0]
+        self.assertEqual(item["occurred_at"], "2024-03-18")
+        self.assertEqual(item["date_precision"], "week")
+
+    def test_confirm_drops_fields_the_entity_does_not_have(self):
+        # work_domain 没有 is_fact 字段：模型多给的字段应在写库前剔除
+        proposal = self.store.insert("change_proposal", {
+            "change_type": "create", "target_entity_type": "work_domain",
+            "proposed_payload": json.dumps({"name": "平台工程", "is_fact": 0, "bogus": 1},
+                                           ensure_ascii=False),
+            "diff_summary": "新建领域", "status": "pending", "priority": 3})
+        self.store.commit()
+        outcome = Review(self.store).confirm(proposal)
+        self.assertEqual(outcome["status"], "confirmed")
+        domain = self.store.get("work_domain", outcome["applied_entity_id"])
+        self.assertEqual(domain["name"], "平台工程")
 
     def test_confirm_link_adds_provenance_to_existing_record(self):
         extraction, result, _ = self.run_extract()

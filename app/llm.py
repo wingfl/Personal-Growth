@@ -24,7 +24,9 @@ DEFAULT_BASE_URL = "https://ai-gateway.neorigin.com.cn/v1"
 DEFAULT_MODEL = "deepseek-v4-1-flash"
 DEFAULT_PROVIDER = "neorigin"
 # 推理型模型会先花 token 思考，留足额度，避免只拿到空内容
-DEFAULT_MAX_TOKENS = 16384
+# 推理型模型的输出预算包含推理 token：16384 时常出现回复被截断（finish_reason=length），
+# 默认抬到 32768；单个作业还可以在调用处覆盖。
+DEFAULT_MAX_TOKENS = 32768
 
 
 class LLMError(Exception):

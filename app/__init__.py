@@ -6,6 +6,7 @@
   2. 原始资料存储与来源追溯      ✅ app/importers.py（含 .zip、飞书导出包）
   3. 项目 / 系统 / 模块 / 事项档案 ✅ app/archive.py
   4. AI 提取、匹配、归并、审核    ✅ app/llm.py + app/extract.py（真实模型，AI 只提建议）
+ 界面                          ✅ app/web.py + web/（本地只读 Web UI，React + Vite + ECharts）
   5. 能力词典与能力证据模型       ⬜ 未开始
   6. 个人特征画像                ⬜
   7. 成长曲线与阶段分析          ⬜
@@ -13,7 +14,8 @@
   9. API / MCP / CLI 接入        ⬜（CLI 已有；MCP/HTTP 未做）
  10. 备份迁移与安全验证          ◐ 备份与校验已做（app/backup.py），迁移与安全验证待补
 
-横切：app/logging.py（统一日志）、app/backup.py（备份与校验）、app/feishu*.py（飞书只读接入与同步）。
+横切：app/logging.py（统一日志）、app/backup.py（备份与校验）、app/feishu*.py（飞书只读接入与同步）；
+界面：app/web.py（标准库 HTTP 服务，只读 API）+ web/（前端工程，构建到 web/dist）。
 工程文档见 docs/；代码索引见 docs/代码索引.md（生成物，机器索引在 .index/index.json）。
 """
 __all__ = [
@@ -30,4 +32,5 @@ __all__ = [
     "logging",
     "model_meta",
     "store",
+    "web",
 ]

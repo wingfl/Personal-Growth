@@ -11,6 +11,7 @@
 | 2 | 原始资料存储与来源追溯 | ✅ `app/` 建库、导入与飞书资料同步 |
 | 3 | 项目 / 系统 / 模块 / 事项档案 | ✅ `app/archive.py` 档案服务层 + CLI |
 | 4 | AI 提取、匹配、归并、审核 | ✅ `app/llm.py` + `app/extract.py` + `ai` 命令组 |
+| 界面 | 本地只读 Web UI（P0+P1） | ✅ `app/web.py` + `web/`（React + Vite + ECharts） |
 | 5–10 | 能力证据、特征画像、成长曲线、成果与材料、Agent 接入、备份迁移 | ⬜ 未开始 |
 
 ## 目录结构
@@ -29,6 +30,7 @@ app/         ids.py 主键与时间、model_meta.py 模型元数据与校验、
              feishu.py 飞书只读接入、feishu_import.py 飞书资料同步、
              extract.py AI 提取与审核（第 4 步）、cli.py 命令行
 tests/       第 1–2 步、第 3 步、第 4 步与飞书同步的自检用例
+web/         本地只读界面：React + Vite + Tailwind + ECharts（构建到 web/dist）
 样例资料/    演示用的示例资料（内容已标注「示例」）
 data/        growth.db（本地档案库）与 attachments/（原始文件副本）
 ```
@@ -78,6 +80,15 @@ python -m app.cli ai reject <建议ID> --note "…"        # 拒绝，不写任�
 python -m app.cli ai jobs                            # 作业记录：模型、token、覆盖片段、产出条数
 ```
 
+批量入库（文件名没写年份时先补期间，再逐篇提取并自动确认）：
+
+```bash
+python -m app.cli import 飞书导出/周报月报-md --recursive --year 2026
+python -m app.cli periods --year 2026 --dry-run      # 已导入的资料按年份补期间（只预览）
+python -m app.cli ai extract <文档ID> --approve      # 提取后立即批量确认，缺日期按资料期间补齐
+python tools/oneoff/_extract_all.py --only-missing   # 逐篇提取→确认，可重复执行（跳过已成功）
+```
+
 自检：
 
 ```bash
@@ -88,6 +99,23 @@ bash tools/step3_demo.sh           # 在 data/demo.db 上跑完第 3 步全部�
 bash tools/step4_demo.sh           # 用真实模型跑完第 4 步提取→审核→写档（日志 data/step4.log）
 python tools/migrate_db.py --all   # 模型加了字段后，给已有库补列与索引
 ```
+
+## 本地界面（只读）
+
+```bash
+cd web && npm install && npm run build     # 首次或前端改动后
+python -m app.web --db data/growth.db --port 8765
+# 浏览器打开 http://127.0.0.1:8765
+```
+
+界面只读：首页看状态与趋势，成长档案查事项/项目/资料，数据分析看 12/26/52 周趋势、构成与热力图，
+成长目标是系统按真实数据算出的「下一步该补什么」，复盘页看 AI 待审建议，设置页看库路径与常用命令。
+确认/拒绝建议、导入、备份等写操作仍走命令行。
+
+- 只监听 `127.0.0.1`，无登录、无外网请求；API 全为 GET。
+- 亮/暗主题（`?theme=dark` 可深链）；≤768px 侧栏收进抽屉。
+- `web/dist` 不进版本库：没有构建产物时服务仍能启动，但页面会提示先构建。
+- 设计规范、页面方案与实施记录见 `docs/UI设计方案.md`。
 
 ## 飞书资料同步（周报 / 月报）
 
@@ -213,8 +241,9 @@ python -m app.cli feishu logout        # 清除本机保存的用户令牌
   与 `apiKeyEnv`，再回落到 `~/.dsh/.credentials.yaml` 的 `refs` 段），顺序是
   显式参数 → `GROWTH_LLM_API_KEY/BASE_URL/MODEL/PROVIDER` → `NEORIGIN_API_KEY` →
   profile 的 apiKeyEnv → 凭据文件。`ai check` 会打印实际用的是哪一个。
-- **token 额度**：默认 `max_tokens = 16384`。这些模型是推理型的，额度太小会把预算全花在思考上、
-  返回空内容（`finish_reason=length` 时会被判为 `parse_failed`），可用 `--max-tokens` 调整。
+- **token 额度**：默认 `max_tokens = 32768`。这些模型是推理型的，额度太小会把预算花在思考上、
+  返回被截断的 JSON；遇到 `finish_reason=length` 造成的 `parse_failed`，引擎会自动翻倍预算重试一次
+  （上限 65536），仍失败才记 `failed`。
 - **一次提取 = 一条 `ai_job`**：记下模型、提示词模板、工作流、送进去的片段 id、token 用量与
   产出条数；失败也会落一条 `status=failed` 的作业与错误码，不会留下永远 running 的作业。
 - **AI 不写正式档案**：提取只产出 `change_proposal`（`status=pending`）+ `proposal_evidence`
@@ -241,5 +270,7 @@ python -m app.cli feishu logout        # 清除本机保存的用户令牌
   备份迁移）未开始；`achievement_*`、`capability_*`、`material` 等表已建好但还没有写入方。
 - 主题归并（`theme_merge`）与事项级去重尚未做：第 4 步不做标题匹配，语义重叠的事项靠第 5 步的
   `work_theme` + `theme_member` 相似度处理。
+- 界面首期只读：审核写操作、导出图片、键盘快捷流在 P2（`docs/UI设计方案.md` 第 9 节）。
+- 界面里的能力雷达、阶段对比、成长曲线仍为空态：它们依赖第 5–7 步的 `capability_*` / `growth_snapshot` 数据。
 - 模板与设计文档中的 3 条待确认问题（材料引用粒度、多人协作、confidence 是否用于自动通过）
   仍需产品决策。

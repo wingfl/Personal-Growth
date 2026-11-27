@@ -35,3 +35,7 @@ backup/
 
 # 代码索引（派生产物，可用 tools/index_code.py build 重建）
 .index/
+
+# 前端依赖与构建产物（本地 npm install / npm run build 生成）
+web/node_modules/
+web/dist/

@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---- 设计 token（shadcn 风格：CSS 变量 + Tailwind 映射） ---------- */
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 240 10% 6%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 6%;
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 42%;
+    --border: 240 6% 90%;
+    --input: 240 6% 88%;
+    --primary: 243 72% 56%;
+    --primary-foreground: 0 0% 100%;
+    --primary-weak: 243 90% 96%;
+    --secondary: 240 5% 95%;
+    --secondary-foreground: 240 6% 20%;
+    --accent: 243 80% 97%;
+    --accent-foreground: 243 60% 35%;
+    --success: 142 68% 34%;
+    --warning: 32 92% 42%;
+    --danger: 0 70% 48%;
+    --info: 217 80% 52%;
+    --ring: 243 72% 56%;
+    --radius: 0.75rem;
+    --chart-1: #4f46e5;
+    --chart-2: #0d9488;
+    --chart-3: #d97706;
+    --chart-4: #db2777;
+    --chart-5: #7c3aed;
+    --chart-6: #64748b;
+  }
+
+  .dark {
+    --background: 240 6% 6%;
+    --foreground: 240 8% 96%;
+    --card: 240 5% 9%;
+    --card-foreground: 240 8% 96%;
+    --muted: 240 5% 14%;
+    --muted-foreground: 240 5% 64%;
+    --border: 240 5% 18%;
+    --input: 240 5% 22%;
+    --primary: 243 80% 72%;
+    --primary-foreground: 240 10% 8%;
+    --primary-weak: 243 40% 18%;
+    --secondary: 240 5% 16%;
+    --secondary-foreground: 240 8% 92%;
+    --accent: 243 30% 18%;
+    --accent-foreground: 243 80% 85%;
+    --success: 142 60% 55%;
+    --warning: 32 90% 62%;
+    --danger: 0 80% 66%;
+    --info: 217 80% 66%;
+    --ring: 243 80% 72%;
+    --chart-1: #818cf8;
+    --chart-2: #2dd4bf;
+    --chart-3: #fbbf24;
+    --chart-4: #f472b6;
+    --chart-5: #a78bfa;
+    --chart-6: #94a3b8;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground text-base antialiased;
+    font-feature-settings: "tnum" 1;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.18);
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden rounded-md bg-muted;
+  }
+
+  .skeleton::after {
+    content: "";
+    @apply absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/50 to-transparent;
+    animation: shimmer 1.4s infinite;
+  }
+
+  .dark .skeleton::after {
+    @apply via-white/5;
+  }
+
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+}
