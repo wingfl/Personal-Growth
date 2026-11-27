@@ -1,5 +1,5 @@
-import { ShieldCheck, Terminal } from "lucide-react";
-import { useApi } from "@/lib/api";
+import { ShieldCheck, Terminal, UserRound } from "lucide-react";
+import { useApi, type Profile } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorState, PageSkeleton } from "@/components/ui/states";
@@ -25,6 +25,7 @@ const LABELS: Record<string, string> = {
 
 export function Settings() {
   const { data, error, loading, reload } = useApi<Health>("/api/health");
+  const profile = useApi<Profile>("/api/profile");
 
   return (
     <div className="space-y-5">
@@ -42,6 +43,39 @@ export function Settings() {
       ) : (
         data && (
           <>
+            <Card>
+              <CardHeader>
+                <div>
+                  <CardTitle className="text-base">身份与角色</CardTitle>
+                  <CardDescription>分析时用它理解「你处在什么位置」，不是账号系统</CardDescription>
+                </div>
+                <UserRound className="h-4 w-4 text-muted-foreground" aria-hidden />
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                {profile.data?.exists ? (
+                  <>
+                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      <span className="font-medium">{profile.data.display_name ?? "我"}</span>
+                      <Badge variant="outline">{profile.data.current_title ?? "未填职位"}</Badge>
+                      {profile.data.company ? (
+                        <span className="text-xs text-muted-foreground">{profile.data.company}</span>
+                      ) : null}
+                    </div>
+                    {profile.data.summary ? (
+                      <p className="text-xs leading-5 text-muted-foreground">{profile.data.summary}</p>
+                    ) : null}
+                    <p className="text-2xs text-muted-foreground">
+                      改角色：<code className="rounded bg-muted px-1 py-0.5">python -m app.cli profile set --title 产品经理 --set</code>
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    还没有身份记录。执行 <code className="rounded bg-muted px-1 py-0.5">python -m app.cli profile set --title 你的职位 --set</code> 后，目标与建议会按角色语境解读。
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <div>

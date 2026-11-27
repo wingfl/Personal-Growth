@@ -56,7 +56,7 @@ class TestSchema(BaseCase):
     def test_tables_created(self):
         names = {r["name"] for r in self.store.query(
             "SELECT name FROM sqlite_master WHERE type = 'table'")}
-        self.assertEqual(len(self.store.model.entities), 44)
+        self.assertEqual(len(self.store.model.entities), 45)
         self.assertTrue(set(self.store.model.entities) <= names)
 
     def test_required_not_null_enforced(self):

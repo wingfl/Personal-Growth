@@ -1810,6 +1810,71 @@
         ]
       ]
     },
+    "goal_type": {
+      "l": "目标类型",
+      "v": [
+        [
+          "capability",
+          "能力提升",
+          "围绕能力维度定目标，如补齐数据建模能力"
+        ],
+        [
+          "experience",
+          "经验积累",
+          "争取某类经历，如独立负责一个从 0 到 1 的项目"
+        ],
+        [
+          "output",
+          "成果产出",
+          "产出可展示的成果，如一份方法论或一个上线系统"
+        ],
+        [
+          "completeness",
+          "资料补全",
+          "把档案本身补完整，如补齐工作领域与能力证据"
+        ],
+        [
+          "habit",
+          "习惯养成",
+          "周期性行为，如每周复盘"
+        ],
+        [
+          "other",
+          "其他",
+          "不属于以上类型的个人目标"
+        ]
+      ]
+    },
+    "goal_status": {
+      "l": "目标状态",
+      "v": [
+        [
+          "proposed",
+          "建议中",
+          "由系统或用户提出，尚未开始"
+        ],
+        [
+          "active",
+          "进行中",
+          "开始推进，允许更新进度"
+        ],
+        [
+          "paused",
+          "已暂停",
+          "暂时搁置，保留进度"
+        ],
+        [
+          "achieved",
+          "已达成",
+          "达到 success_criteria 并已确认"
+        ],
+        [
+          "abandoned",
+          "已放弃",
+          "主动放弃，需写原因"
+        ]
+      ]
+    },
     "entity_type": {
       "l": "实体类型（多态引用目标，由实体清单自动生成）",
       "v": [
@@ -1986,6 +2051,11 @@
         [
           "growth_snapshot",
           "成长分析快照",
+          "05_growth"
+        ],
+        [
+          "growth_goal",
+          "成长目标",
           "05_growth"
         ],
         [
@@ -11417,6 +11487,325 @@
       ]
     },
     {
+      "id": "growth_goal",
+      "layer": "05_growth",
+      "name": "成长目标",
+      "priority": "P1",
+      "flags": [
+        "origin",
+        "review",
+        "fact"
+      ],
+      "purpose": "把「下一步该往哪走」变成可跟踪、可验收的目标：有周期、有达成标准、有进度与证据，与工作事项、项目、能力维度关联；区别于 project.goal（项目的业务目标）。",
+      "fields": [
+        {
+          "n": "name",
+          "l": "目标名称",
+          "t": "string",
+          "req": true,
+          "idx": true,
+          "d": "一句话写清要达成什么；避免写成工作任务。"
+        },
+        {
+          "n": "goal_type",
+          "l": "目标类型",
+          "t": "enum",
+          "e": "goal_type",
+          "req": true,
+          "def": "capability",
+          "d": "决定目标页的分组与建议口径。"
+        },
+        {
+          "n": "description",
+          "l": "目标说明",
+          "t": "longtext",
+          "d": "为什么定这个目标、当前差距在哪；来自用户自述，不由 AI 代写。"
+        },
+        {
+          "n": "status",
+          "l": "目标状态",
+          "t": "enum",
+          "e": "goal_status",
+          "req": true,
+          "def": "active",
+          "idx": true,
+          "d": "只有 active 的目标参与进度提醒；achieved 必须进度 100%。"
+        },
+        {
+          "n": "start_date",
+          "l": "开始日期",
+          "t": "date",
+          "req": true,
+          "d": "目标起算日；只精确到月时按当月首日存。"
+        },
+        {
+          "n": "end_date",
+          "l": "目标日期",
+          "t": "date",
+          "d": "计划达成的日期；长期目标可留空并保持 active。"
+        },
+        {
+          "n": "date_precision",
+          "l": "时间精度",
+          "t": "enum",
+          "e": "date_precision",
+          "def": "month",
+          "d": "start_date/end_date 的精度，避免把「这个季度」伪造成某一天。"
+        },
+        {
+          "n": "progress_percent",
+          "l": "进度",
+          "t": "integer",
+          "req": true,
+          "def": "0",
+          "min": 0,
+          "max": 100,
+          "d": "0~100 的整数百分比；由用户按证据更新，不由 AI 估算。"
+        },
+        {
+          "n": "success_criteria",
+          "l": "达成标准",
+          "t": "text",
+          "d": "可判定的完成条件，如「独立完成一次全量评估并输出方案」；没有标准的进度不计入达成。"
+        },
+        {
+          "n": "measurement_note",
+          "l": "衡量方式",
+          "t": "text",
+          "d": "用什么数据或证据判断进度，如事项数量、项目结果、能力证据条数。"
+        },
+        {
+          "n": "progress_note",
+          "l": "进展说明",
+          "t": "longtext",
+          "d": "最近一次推进到什么程度、卡在哪；供复盘时回看。"
+        },
+        {
+          "n": "related_project_id",
+          "l": "关联项目",
+          "t": "ref",
+          "ref": "project",
+          "idx": true,
+          "d": "目标主要依托的项目，可空。"
+        },
+        {
+          "n": "related_domain_id",
+          "l": "关联领域",
+          "t": "ref",
+          "ref": "work_domain",
+          "idx": true,
+          "d": "目标所属的工作领域，可空。"
+        },
+        {
+          "n": "related_capability_id",
+          "l": "关联能力",
+          "t": "ref",
+          "ref": "capability",
+          "idx": true,
+          "d": "能力类目标可挂到具体能力项；能力词典未建立时留空。"
+        }
+      ],
+      "rules": [
+        "`status = achieved` 时 `progress_percent` 必须为 100，否则校验失败。",
+        "`end_date` 早于 `start_date` 时校验失败。",
+        "`progress_percent` 只能由用户确认后更新；AI 可以建议，但不得直接写正式档案。",
+        "`abandoned` 的目标必须写 `progress_note` 说明放弃原因，避免目标无声消失。"
+      ],
+      "notes": [
+        "与 `project.goal` 的区别：后者是项目的业务目标（为业务达成什么），本实体是个人的成长目标（为自己提升什么）。",
+        "目标不自动生成事项；完成目标靠关联的 work_item 与 capability_evidence 支撑。"
+      ],
+      "full_fields": [
+        {
+          "n": "id",
+          "l": "主键",
+          "t": "uuid",
+          "req": true,
+          "d": "UUIDv7；客户端可离线生成，按时间有序"
+        },
+        {
+          "n": "name",
+          "l": "目标名称",
+          "t": "string",
+          "d": "一句话写清要达成什么；避免写成工作任务。",
+          "req": true,
+          "idx": true
+        },
+        {
+          "n": "goal_type",
+          "l": "目标类型",
+          "t": "enum",
+          "d": "决定目标页的分组与建议口径。",
+          "e": "goal_type",
+          "req": true,
+          "def": "capability"
+        },
+        {
+          "n": "description",
+          "l": "目标说明",
+          "t": "longtext",
+          "d": "为什么定这个目标、当前差距在哪；来自用户自述，不由 AI 代写。"
+        },
+        {
+          "n": "status",
+          "l": "目标状态",
+          "t": "enum",
+          "d": "只有 active 的目标参与进度提醒；achieved 必须进度 100%。",
+          "e": "goal_status",
+          "req": true,
+          "def": "active",
+          "idx": true
+        },
+        {
+          "n": "start_date",
+          "l": "开始日期",
+          "t": "date",
+          "d": "目标起算日；只精确到月时按当月首日存。",
+          "req": true
+        },
+        {
+          "n": "end_date",
+          "l": "目标日期",
+          "t": "date",
+          "d": "计划达成的日期；长期目标可留空并保持 active。"
+        },
+        {
+          "n": "date_precision",
+          "l": "时间精度",
+          "t": "enum",
+          "d": "start_date/end_date 的精度，避免把「这个季度」伪造成某一天。",
+          "e": "date_precision",
+          "def": "month"
+        },
+        {
+          "n": "progress_percent",
+          "l": "进度",
+          "t": "integer",
+          "d": "0~100 的整数百分比；由用户按证据更新，不由 AI 估算。",
+          "req": true,
+          "def": "0",
+          "min": 0,
+          "max": 100
+        },
+        {
+          "n": "success_criteria",
+          "l": "达成标准",
+          "t": "text",
+          "d": "可判定的完成条件，如「独立完成一次全量评估并输出方案」；没有标准的进度不计入达成。"
+        },
+        {
+          "n": "measurement_note",
+          "l": "衡量方式",
+          "t": "text",
+          "d": "用什么数据或证据判断进度，如事项数量、项目结果、能力证据条数。"
+        },
+        {
+          "n": "progress_note",
+          "l": "进展说明",
+          "t": "longtext",
+          "d": "最近一次推进到什么程度、卡在哪；供复盘时回看。"
+        },
+        {
+          "n": "related_project_id",
+          "l": "关联项目",
+          "t": "ref",
+          "d": "目标主要依托的项目，可空。",
+          "ref": "project",
+          "idx": true
+        },
+        {
+          "n": "related_domain_id",
+          "l": "关联领域",
+          "t": "ref",
+          "d": "目标所属的工作领域，可空。",
+          "ref": "work_domain",
+          "idx": true
+        },
+        {
+          "n": "related_capability_id",
+          "l": "关联能力",
+          "t": "ref",
+          "d": "能力类目标可挂到具体能力项；能力词典未建立时留空。",
+          "ref": "capability",
+          "idx": true
+        },
+        {
+          "n": "origin",
+          "l": "数据来源",
+          "t": "enum",
+          "e": "origin",
+          "req": true,
+          "d": "区分用户主动录入与 AI 推断，是事实/推断区分的载体"
+        },
+        {
+          "n": "review_status",
+          "l": "审核状态",
+          "t": "enum",
+          "e": "review_status",
+          "req": true,
+          "def": "confirmed",
+          "d": "仅 confirmed 参与分析、画像与材料生成；AI 新建默认为 pending"
+        },
+        {
+          "n": "confidence",
+          "l": "AI 置信度",
+          "t": "decimal",
+          "d": "0~1，仅 origin=ai_agent 时有意义，不得作为正式结论强度展示",
+          "min": 0,
+          "max": 1
+        },
+        {
+          "n": "reviewed_at",
+          "l": "审核时间",
+          "t": "datetime",
+          "d": "用户确认或拒绝该记录的时间"
+        },
+        {
+          "n": "is_fact",
+          "l": "是否事实",
+          "t": "boolean",
+          "req": true,
+          "def": "true",
+          "idx": true,
+          "d": "内容是否直接来自事实（原文摘录或用户确认）。false 表示含 AI 推断成分，展示与分析时必须标注，不得当作事实陈述"
+        },
+        {
+          "n": "fact_basis",
+          "l": "事实依据",
+          "t": "text",
+          "d": "判定为事实或推断的依据：来源片段、用户确认记录或推断链条说明；is_fact=false 时必填"
+        },
+        {
+          "n": "created_at",
+          "l": "创建时间",
+          "t": "datetime",
+          "req": true,
+          "d": "记录首次写入时间（UTC）"
+        },
+        {
+          "n": "updated_at",
+          "l": "更新时间",
+          "t": "datetime",
+          "req": true,
+          "d": "最后一次正式变更时间，同步冲突判定依据"
+        },
+        {
+          "n": "revision",
+          "l": "版本号",
+          "t": "integer",
+          "req": true,
+          "def": "1",
+          "d": "每次正式变更 +1；材料与档案的版本回溯依据"
+        },
+        {
+          "n": "deleted_at",
+          "l": "删除时间",
+          "t": "datetime",
+          "d": "软删除标记；非空即视为已删除，历史保留在 audit_log"
+        }
+      ]
+    },
+    {
       "id": "material",
       "layer": "05_growth",
       "name": "个人材料",
@@ -14473,13 +14862,22 @@
         "self_assessment"
       ],
       "note": "事实由 provenance_link 指回原文；推断由 is_fact=false + fact_basis 标注；评价只存在于 evidence_evaluation 与 self_assessment，三类数据不混放"
+    },
+    {
+      "id": "5.1-G1",
+      "src": "5.1 成长目标",
+      "req": "目标可跟踪、可验收、能复盘",
+      "entities": [
+        "growth_goal"
+      ],
+      "note": "目标有周期、达成标准、进度与关联；进度与状态只由用户确认更新，AI 仅提建议"
     }
   ],
   "stats": {
-    "entities": 44,
-    "enums": 51,
-    "fields": 911,
-    "relations": 65,
-    "coverage": 68
+    "entities": 45,
+    "enums": 53,
+    "fields": 936,
+    "relations": 68,
+    "coverage": 69
   }
 }

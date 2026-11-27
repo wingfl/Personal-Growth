@@ -530,6 +530,116 @@ def _role(args):
         store.close()
 
 
+
+def _goal(args):
+    store = Store(args.db)
+    arc = Archive(store)
+    try:
+        if args.action == "add":
+            values = {
+                "name": args.name,
+                "goal_type": args.type or "capability",
+                "status": args.status or "active",
+                "start_date": args.start,
+                "end_date": args.end,
+                "date_precision": args.precision or "month",
+                "progress_percent": args.progress if args.progress is not None else 0,
+                "success_criteria": args.criteria,
+                "measurement_note": args.measure,
+                "progress_note": args.note,
+                "description": args.description,
+                "related_project_id": arc.resolve("project", args.project) if args.project else None,
+                "related_domain_id": arc.resolve("work_domain", args.domain) if args.domain else None,
+            }
+            values = {k: v for k, v in values.items() if v is not None}
+            values.setdefault("origin", "user")
+            row_id = store.insert("growth_goal", values, actor_type="user")
+            row = store.get("growth_goal", row_id)
+            print("✓ 已建立成长目标：%s（%s）" % (row["name"], row["goal_type"]))
+            print("  目标ID %s｜%s~%s｜进度 %s%%" % (row["id"], row["start_date"],
+                                                    row["end_date"] or "长期", row["progress_percent"]))
+        elif args.action == "list":
+            rows = store.list("growth_goal", limit=args.limit,
+                              order_by="status ASC, end_date ASC")
+            _print_rows(rows, [("目标ID", "id"), ("目标", "name"), ("类型", "goal_type"),
+                               ("状态", "status"), ("进度", "progress_percent"),
+                               ("开始", "start_date"), ("目标日期", "end_date")])
+            active = [r for r in rows if r["status"] in ("proposed", "active")]
+            if active:
+                avg = sum(int(r["progress_percent"] or 0) for r in active) // len(active)
+                print("\n进行中 %d 个，平均进度 %d%%" % (len(active), avg))
+        elif args.action == "show":
+            row = store.get("growth_goal", arc.resolve("growth_goal", args.goal_id))
+            for key in ("id", "name", "goal_type", "status", "progress_percent", "start_date",
+                        "end_date", "success_criteria", "measurement_note", "progress_note"):
+                if row.get(key) not in (None, ""):
+                    print("%-16s %s" % (key, row[key]))
+        elif args.action == "update":
+            goal_id = arc.resolve("growth_goal", args.goal_id)
+            row = store.get("growth_goal", goal_id)
+            patch = {}
+            if args.progress is not None:
+                patch["progress_percent"] = args.progress
+            if args.status:
+                patch["status"] = args.status
+            if args.note:
+                patch["progress_note"] = args.note
+            if args.criteria:
+                patch["success_criteria"] = args.criteria
+            if args.end:
+                patch["end_date"] = args.end
+            if patch.get("status") == "achieved":
+                patch["progress_percent"] = 100
+            if patch.get("status") == "abandoned" and not (args.note or row.get("progress_note")):
+                raise SystemExit("放弃目标需要写 --note 说明原因")
+            if not patch:
+                raise SystemExit("没有要更新的字段（用 --progress / --status / --note）")
+            store.update("growth_goal", goal_id, patch, expected_revision=row.get("revision"),
+                         actor_type="user")
+            print("✓ 已更新目标 %s：%s" % (args.goal_id, ", ".join(sorted(patch))))
+        store.commit()
+    finally:
+        store.close()
+
+
+def _profile(args):
+    store = Store(args.db)
+    try:
+        rows = store.list("user_profile", limit=1)
+        row = rows[0] if rows else None
+        if args.action == "show" or not args.set:
+            if not row:
+                print("还没有本人档案。用 profile set --name 你的称呼 --title 产品经理 建立一条。")
+                return
+            for key in ("display_name", "current_title", "current_company", "industry",
+                        "work_start_date", "target_position", "location_city", "summary"):
+                if row.get(key) not in (None, ""):
+                    print("%-16s %s" % (key, row[key]))
+            return
+        patch = {}
+        mapping = {"name": "display_name", "title": "current_title", "company": "current_company",
+                   "industry": "industry", "summary": "summary", "target": "target_position",
+                   "city": "location_city", "start": "work_start_date"}
+        for attr, field in mapping.items():
+            value = getattr(args, attr)
+            if value is not None:
+                patch[field] = value
+        if not patch:
+            raise SystemExit("没有要写入的字段")
+        if row:
+            store.update("user_profile", row["id"], patch, expected_revision=row.get("revision"),
+                         actor_type="user", remark="更新本人档案")
+            print("✓ 已更新本人档案：%s" % ", ".join(sorted(patch)))
+        else:
+            patch.setdefault("display_name", "我")
+            patch.setdefault("origin", "user")
+            rid = store.insert("user_profile", patch, actor_type="user")
+            print("✓ 已建立本人档案 %s" % rid)
+        store.commit()
+    finally:
+        store.close()
+
+
 def _link(args):
     store = Store(args.db)
     arc = Archive(store)
@@ -1197,6 +1307,38 @@ def build_parser():
     p.add_argument("--primary", action="store_true", help="是否主职")
     p.add_argument("--limit", type=int, default=50)
     p.set_defaults(func=_role)
+
+    p = sub.add_parser("goal", help="成长目标：可跟踪、可验收的个人目标")
+    p.add_argument("action", choices=["add", "list", "show", "update"])
+    p.add_argument("name", nargs="?", help="add：目标名称")
+    p.add_argument("goal_id", nargs="?", help="show/update：目标 ID 或名称")
+    p.add_argument("--type", choices=_enum_choices("goal_type"), help="目标类型（默认 capability）")
+    p.add_argument("--status", choices=_enum_choices("goal_status"), help="目标状态")
+    p.add_argument("--start", help="开始日期（YYYY-MM-DD，必填）")
+    p.add_argument("--end", help="目标日期（留空表示长期）")
+    p.add_argument("--precision", choices=_enum_choices("date_precision"), help="时间精度（默认 month）")
+    p.add_argument("--progress", type=int, help="进度 0~100")
+    p.add_argument("--criteria", help="达成标准（可判定的完成条件）")
+    p.add_argument("--measure", help="衡量方式（用什么证据判断进度）")
+    p.add_argument("--note", help="进展说明；放弃目标时必填")
+    p.add_argument("--description", help="目标说明（为什么定它、差距在哪）")
+    p.add_argument("--project", help="关联项目（ID 或名称）")
+    p.add_argument("--domain", help="关联工作领域（ID 或名称）")
+    p.add_argument("--limit", type=int, default=50)
+    p.set_defaults(func=_goal)
+
+    p = sub.add_parser("profile", help="本人档案（当前职位、行业、简介）")
+    p.add_argument("action", choices=["show", "set"], nargs="?", default="show")
+    p.add_argument("--name", help="姓名或称呼")
+    p.add_argument("--title", help="当前职位，如 产品经理")
+    p.add_argument("--company", help="当前公司")
+    p.add_argument("--industry", help="所属行业")
+    p.add_argument("--summary", help="个人简介（自述，不由 AI 代写）")
+    p.add_argument("--target", help="目标岗位")
+    p.add_argument("--city", help="常驻城市")
+    p.add_argument("--start", help="参加工作日期（YYYY-MM-DD）")
+    p.add_argument("--set", action="store_true", help="写入（不带则只查看）")
+    p.set_defaults(func=_profile)
 
     p = sub.add_parser("link", help="把来源片段关联到任意档案记录")
     p.add_argument("entity")

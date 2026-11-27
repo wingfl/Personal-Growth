@@ -310,8 +310,48 @@ class Api:
                            "created_at": row.get("created_at"),
                            "job_id": row.get("job_id")} for row in rows]}
 
+    def _goal_cards(self):
+        """成长目标实体：进度、剩余天数、关联对象名。"""
+        projects = self._project_map()
+        today = date.today()
+        out = []
+        for row in self.store.list("growth_goal", limit=200,
+                                   order_by="status ASC, end_date ASC"):
+            end = row.get("end_date")
+            days_left = None
+            if end:
+                try:
+                    days_left = (date.fromisoformat(end[:10]) - today).days
+                except ValueError:
+                    days_left = None
+            proj = projects.get(row.get("related_project_id") or "")
+            out.append({
+                "id": row["id"], "name": row["name"], "goal_type": row["goal_type"],
+                "status": row["status"], "progress_percent": int(row["progress_percent"] or 0),
+                "start_date": row.get("start_date"), "end_date": end,
+                "days_left": days_left, "success_criteria": row.get("success_criteria"),
+                "measurement_note": row.get("measurement_note"),
+                "progress_note": row.get("progress_note"),
+                "project_name": proj["name"] if proj else None,
+            })
+        return out
+
+    def profile(self):
+        rows = self.store.list("user_profile", limit=1)
+        if not rows:
+            return {"exists": False}
+        row = rows[0]
+        # 前端按 company/city 命名取用，这里做一次显式改名，避免直接暴露列名
+        mapping = {
+            "display_name": "display_name", "current_title": "current_title",
+            "current_company": "company", "industry": "industry",
+            "work_start_date": "work_start_date", "target_position": "target_position",
+            "location_city": "city", "summary": "summary",
+        }
+        return {"exists": True, **{out: row.get(col) for col, out in mapping.items()}}
+
     def goals(self):
-        """成长目标建议：从真实数据里算出来的「该补什么」，不是工作目标。
+        """成长目标：已持久化的目标 + 从真实数据算出的「该补什么」建议。
 
         - 能力证据缺项（capability_evidence.is_supplement_needed）
         - 事项没标领域（无法做领域分布）
@@ -366,10 +406,10 @@ class Api:
                 "rationale": "第 5 步（能力词典与能力证据）尚未实现，当前无法生成能力雷达与成长目标。",
                 "action": "完成第 5 步后，这里会自动出现「补齐某项能力」的具体目标",
                 "count": 0})
-        return {"generated_at": now_iso(), "suggestions": suggestions,
-                "persisted": False,
-                "note": "这些是按真实数据算出来的建议，还没有持久化为「成长目标」实体；"
-                        "需要长期跟踪时再新增 goal 表。"}
+        return {"generated_at": now_iso(), "goals": self._goal_cards(),
+                "suggestions": suggestions, "persisted": True,
+                "note": "goals 是可跟踪的成长目标（有周期、达成标准与进度）；"
+                        "suggestions 是按真实数据算出的补全建议，确认后再转成目标。"}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -449,6 +489,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(api.proposals(params))
             if path == "/api/goals":
                 return self._json(api.goals())
+            if path == "/api/profile":
+                return self._json(api.profile())
             if path.startswith("/api/"):
                 return self._json({"error": "not found", "path": path}, 404)
             return self._static(path)
@@ -458,11 +500,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "internal_error", "detail": str(exc)}, 500)
 
 
-def serve(db_path, host="127.0.0.1", port=8765, dist=DEFAULT_DIST):
-    api = Api(db_path)
+def make_server(db_path, port=8765, host="127.0.0.1", dist=DEFAULT_DIST):
+    """建好但还没启动的服务；给 serve() 与一键启动脚本复用。"""
     server = ThreadingHTTPServer((host, port), Handler)
-    server.api = api
+    server.api = Api(db_path)
     server.dist = os.path.abspath(dist)
+    return server
+
+
+def serve(db_path, host="127.0.0.1", port=8765, dist=DEFAULT_DIST):
+    server = make_server(db_path, port, host, dist)
     print("个人成长档案界面：http://%s:%d/（Ctrl+C 停止）" % (host, port))
     try:
         server.serve_forever()

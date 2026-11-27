@@ -63,6 +63,37 @@ export type Suggestion = {
   count: number;
 };
 
+export type GoalCard = {
+  id: string;
+  name: string;
+  goal_type: string;
+  description: string | null;
+  status: string;
+  start_date: string;
+  end_date: string | null;
+  date_precision: string | null;
+  progress_percent: number;
+  success_criteria: string | null;
+  measurement_note: string | null;
+  progress_note: string | null;
+  project_id: string | null;
+  project_name: string | null;
+  domain_id: string | null;
+  days_left: number | null;
+};
+
+export type Profile = {
+  exists: boolean;
+  display_name: string | null;
+  current_title: string | null;
+  company: string | null;
+  industry: string | null;
+  work_start_date: string | null;
+  target_position: string | null;
+  city: string | null;
+  summary: string | null;
+};
+
 export type MixRow = { key: string; count: number };
 
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
