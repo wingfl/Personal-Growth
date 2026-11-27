@@ -12,7 +12,8 @@
 | 3 | 项目 / 系统 / 模块 / 事项档案 | ✅ `app/archive.py` 档案服务层 + CLI |
 | 4 | AI 提取、匹配、归并、审核 | ✅ `app/llm.py` + `app/extract.py` + `ai` 命令组 |
 | 界面 | 本地只读 Web UI（P0+P1） | ✅ `app/web.py` + `web/`（React + Vite + ECharts） |
-| 5–10 | 能力证据、特征画像、成长曲线、成果与材料、Agent 接入、备份迁移 | ⬜ 未开始 |
+| 5 | 能力词典、能力证据与能力画像 | ✅ `app/capability.py` + 「能力画像」页 |
+| 6–10 | 特征画像、成长曲线、成果与材料、Agent 接入、备份迁移 | ⬜ 未开始 |
 
 ## 目录结构
 
@@ -113,6 +114,7 @@ python -m app.web --db data/growth.db --port 8765
 ```
 
 界面只读：首页看状态与趋势，成长档案查事项/项目/资料，数据分析看 12/26/52 周趋势、构成与热力图，
+能力画像页看 10 项能力的证据数、平均强度与最近原文（没有证据的能力留空，不给分），
 成长目标页上半是**可跟踪的目标**（`growth_goal`，有周期/达成标准/进度），下半是系统按真实数据算出的
 「下一步该补什么」建议；复盘页看 AI 待审建议，设置页看本人角色、库路径与常用命令。
 确认/拒绝建议、导入、备份等写操作仍走命令行。
@@ -240,6 +242,21 @@ python -m app.cli feishu logout        # 清除本机保存的用户令牌
   再把重复记录软删除；过程中出错整体回滚。关联表上撞唯一约束的重复关联会被丢弃并在
   命令输出里列出（规则 J14）。
 
+## 能力证据与画像（第 5 步）
+
+能力画像不是打分器，而是把已确认的工作事项映射到一套固定的能力词典，并保留原文依据。
+
+- **词典**：4 个分类、10 项能力（用户洞察、产品设计、数据分析、项目推进、质量与验收、风险处理、
+  跨团队协作、沟通表达、领域知识、复盘迁移）。`python -m app.cli capability seed` 幂等建表，
+  改词典请改 `app/capability.py` 的 `CAPABILITIES` 后重跑。
+- **标注**：`python -m app.cli capability map` 分批把没有证据的事项送进模型，产出
+  `change_proposal`（target=`capability_evidence`）。每条建议必须带一句逐字来自事项标题或正文的引用，
+  强度 1–5（1 参与 / 2 独立完成常规 / 3 独立负责复杂 / 4 定标准带人 / 5 定义方向并被外部验证）。
+- **确认**：建议在「复盘 → 待处理建议」里确认，或用 `Review.confirm_batch(job_id=...)` 批量确认；
+  只有确认后的证据才进入画像。
+- **查看**：`capability list`、`capability evidence CODE`，或界面「能力画像」页（雷达 + 分类卡片 +
+  最近一条原文）。`/api/capabilities` 只读。
+
 ## AI 提取与审核时的口径说明（第 4 步）
 
 - **模型来源**：默认读本机 DSH 配置（`~/.dsh/profiles/<profile>/cordis.patch.yml` 的 `baseURL`
@@ -271,11 +288,11 @@ python -m app.cli feishu logout        # 清除本机保存的用户令牌
   可读你「我的空间」的全部云文档）。用户身份需要在开放平台配置重定向 URL
   `http://localhost:8765/callback` 并开通对应权限后发布版本，首次授权前 `feishu check`
   会提示还缺哪一步。
-- 第 5 步及之后（能力证据与画像、成长曲线、成果案例中心、个人材料中心、Agent 接口、
-  备份迁移）未开始；`achievement_*`、`capability_*`、`material` 等表已建好但还没有写入方。
+- 第 6 步及之后（特征画像、成长曲线、成果案例中心、个人材料中心、Agent 接口、备份迁移）未开始；
+  `achievement_*`、`material`、`growth_stage`/`growth_snapshot` 等表已建好但还没有写入方。
 - 主题归并（`theme_merge`）与事项级去重尚未做：第 4 步不做标题匹配，语义重叠的事项靠第 5 步的
   `work_theme` + `theme_member` 相似度处理。
 - 界面首期只读：审核写操作、导出图片、键盘快捷流在 P2（`docs/UI设计方案.md` 第 9 节）。
-- 界面里的能力雷达、阶段对比、成长曲线仍为空态：它们依赖第 5–7 步的 `capability_*` / `growth_snapshot` 数据。
+- 能力雷达已可用（第 5 步）；阶段对比与成长曲线仍为空态：它们依赖第 7 步的 `growth_stage` / `growth_snapshot` 数据。
 - 模板与设计文档中的 3 条待确认问题（材料引用粒度、多人协作、confidence 是否用于自动通过）
   仍需产品决策。

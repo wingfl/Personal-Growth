@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts/core";
 import type { EChartsOption } from "echarts";
-import { BarChart, HeatmapChart, LineChart } from "echarts/charts";
+import { BarChart, HeatmapChart, LineChart, RadarChart } from "echarts/charts";
 import {
   GridComponent,
   LegendComponent,
@@ -12,7 +12,7 @@ import { CanvasRenderer } from "echarts/renderers";
 import { cn } from "@/lib/utils";
 
 // 只注册用到的图表与组件：完整包 1.3MB，按需引入后约 400KB
-echarts.use([LineChart, BarChart, HeatmapChart, GridComponent, TooltipComponent, LegendComponent, VisualMapComponent, CanvasRenderer]);
+echarts.use([LineChart, BarChart, HeatmapChart, RadarChart, GridComponent, TooltipComponent, LegendComponent, VisualMapComponent, CanvasRenderer]);
 
 type Props = {
   // 允许对象字面量直接传入：ECharts 的类型要求字面量 as const，实践中过于繁琐
@@ -42,7 +42,8 @@ export function EChart({ option, height = 280, className, empty }: Props) {
   }, []);
 
   useEffect(() => {
-    chart.current?.setOption(option, true);
+    // 暗色主题自带背景色，会和卡片底色分层；统一交给页面控制背景
+    chart.current?.setOption({ backgroundColor: "transparent", ...option }, true);
   }, [option]);
 
   if (empty) return <>{empty}</>;

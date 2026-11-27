@@ -4,6 +4,7 @@ import { Topbar } from "./components/layout/Topbar";
 import { Home } from "./pages/Home";
 import { Archive } from "./pages/Archive";
 import { Insights } from "./pages/Insights";
+import { Capabilities } from "./pages/Capabilities";
 import { Goals } from "./pages/Goals";
 import { Review } from "./pages/Review";
 import { Settings } from "./pages/Settings";
@@ -19,6 +20,7 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/archive" element={<Archive />} />
             <Route path="/insights" element={<Insights />} />
+            <Route path="/capabilities" element={<Capabilities />} />
             <Route path="/goals" element={<Goals />} />
             <Route path="/review" element={<Review />} />
             <Route path="/settings" element={<Settings />} />

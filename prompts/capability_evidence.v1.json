@@ -1,0 +1,47 @@
+{
+  "name": "能力证据标注（事项 → 能力）",
+  "job_type": "capability_evidence",
+  "version": 1,
+  "provider": "neorigin",
+  "is_active": true,
+  "system_prompt": "你是资深产品经理的能力评估助手。你只依据给出的事项原文标注能力证据，不臆测、不补全、不评价。证据不足就跳过，宁缺毋滥。所有输出必须是严格 JSON，不要解说文字。",
+  "user_prompt_template": "能力词典（code | 名称 | 定义 | 典型行为）：\n{capabilities}\n\n待标注事项（每行一条：id | 日期 | 类型 | 项目 | 标题 | 正文）：\n{items}\n\n标注规则：\n1. 每条事项最多标注 1 条能力证据；没有明确证据就跳过，不要为了凑数硬标。\n2. quote 必须逐字摘自该事项的标题或正文，不得改写、概括或拼接。\n3. strength 取 1–5：1=参与，2=独立完成常规事项，3=独立负责复杂事项，4=制定标准或带人，5=定义方向并被外部验证。证据不足时取低值。\n4. evidence_type 只能是 responsibility（职责常态）、performance（结果突出）、complexity（难度高）、contribution（对结果有关键贡献）。\n5. statement 是不超过 60 字的事实句，写“做了什么、产生了什么结果”，不写“能力强/优秀”这类评价。\n6. 只输出下面结构的 JSON，不要代码块以外的任何文字。\n\n输出结构：\n{\"evidence\": [{\"item_id\": \"事项 id\", \"capability\": \"能力 code\", \"evidence_type\": \"responsibility\", \"strength\": 3, \"statement\": \"事实句\", \"quote\": \"原文逐字摘录\"}]}",
+  "variables": [
+    {"name": "capabilities", "desc": "能力词典：code | 名称 | 定义 | 典型行为"},
+    {"name": "items", "desc": "待标注事项：id | 日期 | 类型 | 项目 | 标题 | 正文"}
+  ],
+  "output_schema": {
+    "type": "object",
+    "required": ["evidence"],
+    "properties": {
+      "evidence": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["item_id", "capability", "evidence_type", "strength", "statement", "quote"],
+          "properties": {
+            "item_id": {"type": "string"},
+            "capability": {"type": "string"},
+            "evidence_type": {"type": "string", "enum": ["responsibility", "performance", "complexity", "contribution"]},
+            "strength": {"type": "integer", "minimum": 1, "maximum": 5},
+            "statement": {"type": "string"},
+            "quote": {"type": "string"}
+          }
+        }
+      }
+    }
+  },
+  "output_format_note": "只输出 JSON；quote 必须能在对应事项原文中找到。",
+  "applies_to_scopes": ["work_item"],
+  "workflow": {
+    "name": "能力证据标注流程",
+    "job_type": "capability_evidence",
+    "version": 1,
+    "description": "把已确认的工作事项映射到能力词典，产出待确认的能力证据建议。",
+    "steps": [
+      {"step": 1, "name": "选取事项", "desc": "取已确认、尚无能力证据的工作事项"},
+      {"step": 2, "name": "模型标注", "desc": "按能力词典输出证据与原文引用"},
+      {"step": 3, "name": "写入建议", "desc": "生成 change_proposal（target=capability_evidence），人工确认后入库"}
+    ]
+  }
+}

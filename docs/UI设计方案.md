@@ -136,7 +136,8 @@
 侧栏
 ├─ 首页            /                 成长状态一屏看懂
 ├─ 成长档案        /archive?tab=…     项目 / 系统 / 模块 / 事项 / 主题
-├─ 数据分析        /insights          趋势、能力、阶段对比（数据不足时给空态）
+├─ 数据分析        /insights          趋势、构成、热力图、阶段对比（数据不足时给空态）
+├─ 能力画像        /capabilities      能力词典、证据、按月变化
 ├─ 目标管理        /goals             项目目标 + 本周承诺 + 逾期
 ├─ 复盘            /review            周报月报、待审建议
 └─ 设置            /settings          备份、日志、模型与闸门状态
@@ -184,7 +185,7 @@
 | 工作构成（事项类型 / 领域占比） | `work_item.item_type`、`work_domain` | ✅ 可做 | 领域未标注时只显示类型 |
 | 活跃热力图（周 × 星期） | `work_item.occurred_at` | ✅ 可做 | — |
 | 目标进度 | `project.goal` + 状态 | ✅ 可做（粗） | 项目无目标字段时提示补充 |
-| 能力雷达 | `capability_evidence` × `evaluation_dimension` | ❌ 0 条 | 「能力证据还没建立」+ 第 5 步入口 |
+| 能力雷达 | `capability_evidence` × `capability` | ✅ 已实现（第 5 步） | 「还没有能力证据」+ `capability map` 入口 |
 | 阶段对比 | `growth_stage` + `growth_snapshot` | ❌ 0 条 | 「阶段分析还没生成」+ 说明 |
 
 交互：右上时间范围（近 12 周 / 近 6 月 / 全部），全页联动；图表可导出 PNG；点击柱子下钻到该周事项列表。
@@ -302,7 +303,10 @@ web/
 | `GET /api/insights/trend?weeks=` | 每周事项数 + 4 周移动平均 |
 | `GET /api/insights/mix` | 按类型 / 领域的构成 |
 | `GET /api/insights/heatmap?weeks=` | 周 × 星期矩阵 |
-| `GET /api/goals` | 由真实数据算出的成长建议（`persisted: false`） |
+| `GET /api/goals` | 已持久化的 `growth_goal` + 由真实数据算出的建议 |
+| `GET /api/profile` | 身份与角色（`user_profile.current_title` 等） |
+| `GET /api/capabilities` | 能力词典、覆盖/证据/强度汇总、按分类聚合、近 8 个月变化 |
+| `GET /api/capabilities/{id}` | 单个能力的证据明细 |
 
 服务端只做查询与聚合，字段名与 `schema/model.json` 一致。
 
@@ -352,7 +356,8 @@ web/
 | --- | --- | --- |
 | 首页 | 4 张统计卡（含 12 周迷你线）、12 周趋势 + 环比结论、需要处理、最近记录、项目组合 | `/api/summary` |
 | 成长档案 | 事项 / 项目 / 资料三 Tab；搜索、类型与项目筛选、分页；项目详情侧栏 | `/api/items`、`/api/projects` |
-| 数据分析 | 12/26/52 周切换；趋势（柱 + 4 周均线）、工作构成、活跃热力图；能力雷达与阶段对比为「数据未建立」空态 | `/api/insights/*` |
+| 数据分析 | 12/26/52 周切换；趋势（柱 + 4 周均线）、工作构成、活跃热力图；阶段对比为「数据未建立」空态 | `/api/insights/*` |
+| 能力画像 | 覆盖/证据/平均强度三张统计卡、雷达、分类能力卡（五点强度 + 最近原文）；空态给标注命令 | `/api/capabilities`、`/api/capabilities/{id}` |
 | 成长目标 | 真实目标卡（状态/类型/达成标准/剩余天数/进度条）+ 系统建议 + 目标与建议区别说明 | `/api/goals` |
 | 复盘 | 待处理建议、资料提取状态、CLI 命令说明 | `/api/proposals`、`/api/documents` |
 | 设置 | 库路径、记录数、常用命令 | `/api/health` |

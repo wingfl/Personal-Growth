@@ -341,6 +341,52 @@ class Api:
             })
         return out
 
+    def capabilities(self):
+        """能力画像：只呈现已确认证据的数量与强度，不生成总分。"""
+        from .capability import (FRAMEWORK, LEVEL_SCALE, capability_evidence,
+                                 capability_rows)
+        rows = capability_rows(self.store)
+        months = {}
+        for hit in self.store.query(
+                "SELECT capability_id, substr(occurred_at, 1, 7) AS month, COUNT(*) AS n,"
+                " AVG(strength) AS s FROM capability_evidence"
+                " WHERE deleted_at IS NULL GROUP BY capability_id, month ORDER BY month"):
+            months.setdefault(hit["capability_id"], []).append(
+                {"month": hit["month"], "count": hit["n"],
+                 "avg_strength": round(hit["s"], 2) if hit["s"] is not None else None})
+        groups = {}
+        for row in rows:
+            item = dict(row)
+            item["months"] = months.get(row["id"], [])[-8:]
+            item["recent"] = capability_evidence(self.store, row["id"], limit=2)
+            groups.setdefault(row["category"], []).append(item)
+        total = sum(row["evidence_count"] for row in rows)
+        covered = len([row for row in rows if row["evidence_count"]])
+        strength = [row["avg_strength"] for row in rows if row["avg_strength"]]
+        return {
+            "generated_at": now_iso(),
+            "framework": FRAMEWORK,
+            "level_scale": LEVEL_SCALE,
+            "summary": {
+                "capability_count": len(rows),
+                "covered": covered,
+                "evidence_total": total,
+                "avg_strength": round(sum(strength) / len(strength), 2) if strength else None,
+            },
+            "categories": [{"name": name, "capabilities": items}
+                           for name, items in groups.items()],
+            "items": rows,
+        }
+
+    def capability(self, capability_id):
+        from .capability import capability_evidence
+        row = self.store.get("capability", capability_id)
+        items = capability_evidence(self.store, capability_id, limit=200)
+        return {"id": row["id"], "code": row["code"], "name": row["name"],
+                "definition": row.get("definition"), "typical_behavior": row.get("typical_behavior"),
+                "level_scale_note": row.get("level_scale_note"),
+                "evidence": items}
+
     def profile(self):
         rows = self.store.list("user_profile", limit=1)
         if not rows:
@@ -496,6 +542,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(api.goals())
             if path == "/api/profile":
                 return self._json(api.profile())
+            if path == "/api/capabilities":
+                return self._json(api.capabilities())
+            if path.startswith("/api/capabilities/"):
+                return self._json(api.capability(path.rsplit("/", 1)[-1]))
             if path.startswith("/api/"):
                 return self._json({"error": "not found", "path": path}, 404)
             return self._static(path)

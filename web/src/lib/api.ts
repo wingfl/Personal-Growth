@@ -144,3 +144,42 @@ export function useApi<T>(path: string): AsyncState<T> {
 }
 
 export const api = { get };
+
+export type CapabilityEvidence = {
+  id: string;
+  evidence_type: string;
+  strength: number | null;
+  statement: string;
+  strength_basis: string | null;
+  occurred_at: string;
+  item_title: string | null;
+  project_name: string | null;
+};
+
+export type Capability = {
+  id: string;
+  code: string;
+  name: string;
+  definition: string;
+  typical_behavior: string | null;
+  category: string;
+  evidence_count: number;
+  avg_strength: number | null;
+  last_evidence_at: string | null;
+  months: { month: string; count: number; avg_strength: number | null }[];
+  recent: CapabilityEvidence[];
+};
+
+export type CapabilitiesPayload = {
+  generated_at: string;
+  framework: string;
+  level_scale: string;
+  summary: {
+    capability_count: number;
+    covered: number;
+    evidence_total: number;
+    avg_strength: number | null;
+  };
+  categories: { name: string; capabilities: Capability[] }[];
+  items: Capability[];
+};

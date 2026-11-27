@@ -80,6 +80,7 @@ export function Archive() {
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden />
               <Input
+                aria-label="搜索事项标题"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="搜索事项标题"

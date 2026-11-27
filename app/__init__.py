@@ -8,7 +8,7 @@
   4. AI 提取、匹配、归并、审核    ✅ app/llm.py + app/extract.py（真实模型，AI 只提建议）
  界面                          ✅ app/web.py + web/（本地只读 Web UI，React + Vite + ECharts）
  目标                          ✅ growth_goal 实体 + `goal` / `profile` 命令（可跟踪，不冒充工作目标）
-  5. 能力词典与能力证据模型       ⬜ 未开始
+  5. 能力词典与能力证据模型       ✅ app/capability.py + 「能力画像」页（证据须带原文，确认后才计入）
   6. 个人特征画像                ⬜
   7. 成长曲线与阶段分析          ⬜
   8. 成果案例与材料生成          ⬜
@@ -22,6 +22,7 @@
 __all__ = [
     "archive",
     "backup",
+    "capability",
     "cli",
     "extract",
     "feishu",

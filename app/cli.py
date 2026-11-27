@@ -18,6 +18,8 @@ import sys
 import urllib.parse
 
 from .archive import Archive, ArchiveError
+from .capability import (CapabilityMapper, capability_evidence, capability_rows,
+                         seed_capabilities)
 from .backup import BackupError, create_backup, verify_backup_file
 from .extract import ExtractError, Extraction, Review
 from .feishu import FeishuError, resolve_feishu_config
@@ -640,6 +642,70 @@ def _profile(args):
         store.close()
 
 
+def _capability(args):
+    store = Store(args.db)
+    try:
+        if args.action == "seed":
+            made_cat, made_cap = seed_capabilities(store)
+            print("✓ 能力词典就绪：新增分类 %d 个、能力 %d 个" % (made_cat, made_cap))
+            rows = capability_rows(store)
+            print("  当前共 %d 项能力，分为 %d 类"
+                  % (len(rows), len({row["category"] for row in rows})))
+        elif args.action == "list":
+            rows = capability_rows(store)
+            if not rows:
+                print("能力词典为空：先运行 python -m app.cli capability seed")
+                return
+            _print_rows(rows, [("code", "code"), ("能力", "name"), ("分类", "category"),
+                               ("证据", "evidence_count"), ("平均强度", "avg_strength")])
+        elif args.action == "profile":
+            rows = capability_rows(store)
+            if not rows:
+                print("能力词典为空：先运行 python -m app.cli capability seed")
+                return
+            covered = [row for row in rows if row["evidence_count"]]
+            print("能力画像：%d 项能力中有 %d 项已有证据，共 %d 条证据"
+                  % (len(rows), len(covered), sum(row["evidence_count"] for row in rows)))
+            current = None
+            for row in rows:
+                if row["category"] != current:
+                    current = row["category"]
+                    print("\n[%s]" % current)
+                strength = ("%.1f" % row["avg_strength"]) if row["avg_strength"] else "—"
+                print("  %-4s %-8s 证据 %-3d 强度 %s  最近 %s"
+                      % (row["code"], row["name"], row["evidence_count"], strength,
+                         (row["last_evidence_at"] or "")[:10] or "—"))
+        elif args.action == "evidence":
+            rows = capability_rows(store)
+            target = next((row for row in rows if row["code"] == args.code), None)
+            if args.code and not target:
+                target = next((row for row in rows if row["name"] == args.code), None)
+            if not target:
+                raise SystemExit("找不到能力：%s（用 capability list 查看 code）" % args.code)
+            items = capability_evidence(store, target["id"], limit=args.limit or 100)
+            print("%s %s：%d 条证据" % (target["code"], target["name"], len(items)))
+            for row in items:
+                print("  %s 强度%s %s" % ((row["occurred_at"] or "")[:10], row["strength"],
+                                          row["statement"]))
+                if row["strength_basis"]:
+                    print("      原文：%s" % row["strength_basis"][:80])
+        elif args.action == "map":
+            client = LLMClient(resolve_config(model=args.model))
+            mapper = CapabilityMapper(store, client)
+            result = mapper.run(limit=args.limit, batch_size=args.batch,
+                                dry_run=args.dry_run, max_tokens=args.max_tokens)
+            if result.get("dry_run"):
+                print(result["messages"][1]["content"][:1200])
+                return
+            print("✓ 标注 %d 条事项，生成 %d 条证据建议，跳过 %d 条不合格输出"
+                  % (result["items"], result["proposals"], result["skipped"]))
+            print("  作业 %s｜下一步：python -m app.cli ai proposals，确认后写入正式证据"
+                  % result["job_id"])
+        store.commit()
+    finally:
+        store.close()
+
+
 def _link(args):
     store = Store(args.db)
     arc = Archive(store)
@@ -870,6 +936,15 @@ def _parse_sets(pairs):
 def _ai_confirm(args):
     store = Store(args.db)
     try:
+        if args.job:
+            outcome = Review(store).confirm_batch(job_id=args.job, note=args.note)
+            store.commit()
+            print("✓ 作业 %s：共 %d 条，直接确认 %d，补齐确认 %d，未通过 %d"
+                  % (args.job, outcome["total"], outcome["confirmed"],
+                     outcome["modified"], len(outcome["failed"])))
+            for row in outcome["failed"][:10]:
+                print("  ✗ %s" % row.get("error") if isinstance(row, dict) else "  ✗ %s" % row)
+            return
         result = Review(store).confirm(args.proposal, overrides=_parse_sets(args.sets),
                                        note=args.note)
         print("✓ 已%s建议 %s，写入 %s 记录 %s"
@@ -1340,6 +1415,16 @@ def build_parser():
     p.add_argument("--set", action="store_true", help="写入（不带则只查看）")
     p.set_defaults(func=_profile)
 
+    p = sub.add_parser("capability", help="能力词典与能力证据（第 5 步）")
+    p.add_argument("action", choices=["seed", "list", "profile", "evidence", "map"])
+    p.add_argument("code", nargs="?", help="evidence：能力 code 或名称")
+    p.add_argument("--limit", type=int, help="map：最多标注多少条事项；evidence：最多列多少条")
+    p.add_argument("--batch", type=int, default=25, help="map：每次请求多少条事项（默认 25）")
+    p.add_argument("--dry-run", action="store_true", help="map：只打印提示词，不调用模型")
+    p.add_argument("--max-tokens", type=int, help="map：单次回复的 token 预算")
+    p.add_argument("--model", help="map：覆盖模型名")
+    p.set_defaults(func=_capability)
+
     p = sub.add_parser("link", help="把来源片段关联到任意档案记录")
     p.add_argument("entity")
     p.add_argument("id")
@@ -1396,7 +1481,8 @@ def build_parser():
     q.set_defaults(func=_ai_show)
 
     q = ai.add_parser("confirm", help="确认建议并写入正式档案")
-    q.add_argument("proposal", help="建议 ID")
+    q.add_argument("proposal", nargs="?", help="建议 ID（用 --job 时可省略）")
+    q.add_argument("--job", help="按作业批量确认该作业下所有待处理建议")
     q.add_argument("--set", action="append", dest="sets", metavar="字段=值",
                    help="修改建议内容后再确认（可重复）")
     q.add_argument("--note", help="审核备注")
