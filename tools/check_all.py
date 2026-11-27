@@ -396,6 +396,18 @@ def step_secrets(verbose: bool) -> Step:
 
 # ---------------------------------------------------------------- 8 单元测试
 
+def step_index(verbose: bool) -> Step:
+    step = Step("代码索引新鲜度（tools/index_code.py check）")
+    code, out = run([sys.executable, "tools/index_code.py", "check"], verbose)
+    if code != 0:
+        detail = [l.strip() for l in out.splitlines() if l.strip()][-6:]
+        step.fail("索引已过期，" + "；".join(detail))
+    for line in out.splitlines():
+        if line.strip().startswith(("✓", "·")):
+            step.note(line.strip())
+    return step
+
+
 def step_tests(verbose: bool) -> Step:
     step = Step("单元测试（unittest discover -s tests）")
     code, out = run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"], verbose)
@@ -419,16 +431,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     steps = [
-        ("1/8 模型构建", lambda: step_build(args.verbose)),
-        ("2/8 模型自洽", lambda: step_model(args.verbose)),
-        ("3/8 DDL 实跑", lambda: step_ddl(args.verbose)),
-        ("4/8 库同步", lambda: step_databases(args.verbose)),
-        ("5/8 依赖边界", lambda: step_dependencies(args.verbose)),
-        ("6/8 编译", lambda: step_compile(args.verbose)),
-        ("7/8 密钥扫描", lambda: step_secrets(args.verbose)),
+        ("1/9 模型构建", lambda: step_build(args.verbose)),
+        ("2/9 模型自洽", lambda: step_model(args.verbose)),
+        ("3/9 DDL 实跑", lambda: step_ddl(args.verbose)),
+        ("4/9 库同步", lambda: step_databases(args.verbose)),
+        ("5/9 依赖边界", lambda: step_dependencies(args.verbose)),
+        ("6/9 编译", lambda: step_compile(args.verbose)),
+        ("7/9 密钥扫描", lambda: step_secrets(args.verbose)),
+        ("8/9 代码索引", lambda: step_index(args.verbose)),
     ]
     if not args.fast:
-        steps.append(("8/8 单元测试", lambda: step_tests(args.verbose)))
+        steps.append(("9/9 单元测试", lambda: step_tests(args.verbose)))
 
     results: list[Step] = []
     for label, func in steps:

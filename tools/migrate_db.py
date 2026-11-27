@@ -102,11 +102,45 @@ def migrate(db_path, model, dry_run=False):
                 actions.append(sql)
                 if not dry_run:
                     conn.execute(sql)
+        # 触发器（只追加表的写保护）：直接复用生成好的 schema.sql，保证与全新库一致
+        schema_path = os.path.join(ROOT, "schema", "schema.sql")
+        if os.path.isfile(schema_path):
+            have_trg = {r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='trigger'")}
+            for name, body in _schema_triggers(schema_path).items():
+                table = name.replace("trg_", "").rsplit("_no_", 1)[0]
+                exists = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+                ).fetchone()
+                if name in have_trg or not exists:
+                    continue
+                actions.append("创建触发器 %s" % name)
+                if not dry_run:
+                    conn.execute(body)
         if not dry_run:
             conn.commit()
     finally:
         conn.close()
     return actions
+
+
+def _schema_triggers(path):
+    """从 schema.sql 里取出 CREATE TRIGGER 语句（名字 → 完整语句）。"""
+    with io.open(path, encoding="utf-8") as fp:
+        text = fp.read()
+    blocks = {}
+    current = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.upper().startswith("CREATE TRIGGER") or current:
+            current.append(line)
+            if stripped.upper() == "END;":
+                body = "\n".join(current).strip()
+                name = body.split("CREATE TRIGGER IF NOT EXISTS")[-1].split()[0] \
+                    if "IF NOT EXISTS" in body else body.split("CREATE TRIGGER")[-1].split()[0]
+                blocks[name] = body
+                current = []
+    return blocks
 
 
 def main(argv):

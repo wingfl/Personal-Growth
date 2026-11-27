@@ -18,6 +18,7 @@ import sys
 import urllib.parse
 
 from .archive import Archive, ArchiveError
+from .backup import BackupError, create_backup, verify_backup_file
 from .extract import ExtractError, Extraction, Review
 from .feishu import FeishuError, resolve_feishu_config
 from .feishu_auth import (DEFAULT_PORT, DEFAULT_REDIRECT_URI, DEFAULT_SCOPES,
@@ -26,6 +27,7 @@ from .feishu_auth import (DEFAULT_PORT, DEFAULT_REDIRECT_URI, DEFAULT_SCOPES,
 from .feishu_import import FeishuSync, FeishuSyncError
 from .importers import import_path
 from .llm import LLMClient, LLMError, dsh_home, resolve_config
+from .logging import get_logger, setup_logging
 from .model_meta import Model, ModelError, ValidationError
 from .store import DEFAULT_DB, Conflict, Store
 
@@ -155,7 +157,8 @@ def _audit(args):
         sql = "SELECT * FROM audit_log"
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)
-        sql += " ORDER BY occurred_at DESC, id DESC LIMIT ?"
+        # 同一秒内按写入顺序倒序（UUIDv7 的同毫秒部分随机，不能用 id 排序）
+        sql += " ORDER BY occurred_at DESC, rowid DESC LIMIT ?"
         params.append(args.limit)
         rows = store.query(sql, params)
         if not rows:
@@ -191,7 +194,7 @@ def _trace(args):
             "SELECT * FROM provenance_link WHERE entity_type = ? AND entity_id = ? "
             "ORDER BY id DESC", (args.entity, args.entity_id))
         if not rows:
-            print("暂无来源追溯记录（AI 提取与关联功能尚未实现，第 3 步起会写入）。")
+            print("暂无来源追溯记录（AI 建议确认或手工关联来源片段后会写入）。")
         for row in rows:
             frag = store.find_one("source_fragment", id=row["fragment_id"])
             quote = (frag or {}).get("text", "")[:80]
@@ -613,6 +616,21 @@ def _ai_extract(args):
         store.close()
 
 
+def _ai_cleanup(args):
+    store = Store(args.db)
+    try:
+        fixed = Extraction(store).cleanup_stale_jobs(note=args.note)
+        if not fixed:
+            print("没有中断的作业（running / queued）")
+            return
+        print("✓ 已把 %d 条中断作业标记为 failed：" % len(fixed))
+        for job_id in fixed:
+            print("  %s" % job_id)
+        print("  说明：作业记录只作历史留痕，不会自动重跑；需要重跑请重新执行 ai extract。")
+    finally:
+        store.close()
+
+
 def _ai_jobs(args):
     store = Store(args.db)
     try:
@@ -894,9 +912,70 @@ def _feishu_logout(args):
     print("应用凭据（FEISHU_APP_ID / FEISHU_APP_SECRET）未改动。")
 
 
+def _backup(args):
+    action = args.action
+    if action == "create":
+        with Store(args.db) as store:
+            report = create_backup(store, out_dir=args.out,
+                                   include_attachments=not args.no_attachments,
+                                   label=args.label, note=args.note)
+        print("✓ 已备份：%s" % report["path"])
+        print("  记录数 %d｜大小 %.1f KB｜耗时 %d ms｜校验和 %s"
+              % (report["record_count"], report["size_bytes"] / 1024.0,
+                 report["duration_ms"], report["checksum"][:16]))
+        attachments = report.get("attachments")
+        if attachments:
+            print("  附件 %d 个（%.1f KB）→ %s"
+                  % (attachments["files"], attachments["bytes"] / 1024.0, attachments["path"]))
+        elif args.no_attachments:
+            print("  附件：已按 --no-attachments 跳过")
+        else:
+            print("  附件：无（数据库同目录没有 attachments/）")
+        print("  自检：%s" % ("通过" if report["verification"]["ok"] else "未通过"))
+        print("  备份记录 ID：%s" % report["backup_record_id"])
+        return
+
+    if action == "verify":
+        report = verify_backup_file(args.path)
+        print("备份文件：%s" % args.path)
+        print("  大小 %.1f KB｜表 %d 张｜记录 %d 条"
+              % (report["size_bytes"] / 1024.0, report["tables"], report["rows"]))
+        if report["checksum"]:
+            print("  校验和 %s" % report["checksum"])
+        if report["ok"]:
+            print("✓ 校验通过：完整性、表结构与模型一致")
+        else:
+            print("✗ 校验未通过：")
+            for problem in report["problems"]:
+                print("    - %s" % problem)
+            raise BackupError("备份文件校验未通过")
+        return
+
+    with Store(args.db) as store:
+        rows = store.query(
+            "SELECT * FROM backup_record WHERE operation_type='backup' AND deleted_at IS NULL "
+            "ORDER BY created_at DESC LIMIT ?", (args.limit,))
+    if not rows:
+        print("暂无备份记录")
+        return
+    print("最近 %d 次备份：" % len(rows))
+    for row in rows:
+        scope = row.get("scope")
+        attachments = ""
+        if isinstance(scope, dict) and scope.get("attachment_files") is not None:
+            attachments = "｜附件 %s 个" % scope["attachment_files"]
+        print("  %s｜%s｜%s 条｜%.1f KB｜%s%s"
+              % (row["created_at"], row["status"], row["record_count"],
+                 (row["size_bytes"] or 0) / 1024.0, row["file_path"] or "-", attachments))
+
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="python -m app.cli", description="个人成长档案系统命令行")
     parser.add_argument("--db", default=DEFAULT_DB, help="数据库文件路径（默认 data/growth.db）")
+    parser.add_argument("--log-dir", dest="log_dir",
+                        help="日志目录（默认 data/logs）")
+    parser.add_argument("--verbose", action="store_true", help="日志输出到标准错误"
+                        "并把级别降到 DEBUG")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("init", help="按 schema/schema.sql 建库")
@@ -1111,6 +1190,10 @@ def build_parser():
     q.add_argument("--limit", type=int, default=20)
     q.set_defaults(func=_ai_jobs)
 
+    q = ai.add_parser("cleanup", help="把中断的作业（running/queued）标记为 failed")
+    q.add_argument("--note", help="写进 error_message 的说明")
+    q.set_defaults(func=_ai_cleanup)
+
     q = ai.add_parser("proposals", help="查看待审核建议")
     q.add_argument("--status", default="pending",
                    help="pending / confirmed / modified / rejected / superseded / expired / all")
@@ -1192,18 +1275,47 @@ def build_parser():
     q = fs.add_parser("logout", help="清除本机保存的飞书用户令牌")
     q.set_defaults(func=_feishu_logout)
 
+    bk = sub.add_parser("backup", help="备份数据库与附件、校验备份文件")
+    bks = bk.add_subparsers(dest="action", required=True)
+
+    q = bks.add_parser("create", help="做一次热备份（VACUUM INTO + 附件拷贝）并留档")
+    q.add_argument("--out", help="输出目录（默认 项目根目录/backup）")
+    q.add_argument("--no-attachments", action="store_true", dest="no_attachments",
+                   help="不拷贝附件目录")
+    q.add_argument("--label", help="文件名后缀标签（如 演练、迁移前）")
+    q.add_argument("--note", help="备注，写进备份记录的 scope.note")
+    q.set_defaults(func=_backup)
+
+    q = bks.add_parser("verify", help="校验一个备份文件：完整性、表结构、可读性")
+    q.add_argument("path")
+    q.set_defaults(func=_backup)
+
+    q = bks.add_parser("list", help="列出最近的备份记录")
+    q.add_argument("--limit", type=int, default=20)
+    q.set_defaults(func=_backup)
+
     return parser
 
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    setup_logging(log_dir=args.log_dir, level="DEBUG" if args.verbose else "INFO")
+    log = get_logger("cli")
+    log.info("命令：%s", " ".join(sys.argv[1:]) if argv is None else " ".join(argv))
     try:
         args.func(args)
-    except (ArchiveError, ExtractError, LLMError, ModelError, ValidationError, Conflict,
-            FeishuError, FeishuSyncError, FeishuAuthError,
+    except (ArchiveError, BackupError, ExtractError, LLMError, ModelError, ValidationError,
+            Conflict, FeishuError, FeishuSyncError, FeishuAuthError,
             ValueError, FileNotFoundError) as exc:
+        log.warning("命令失败：%s: %s", type(exc).__name__, exc)
         print("错误：%s" % exc, file=sys.stderr)
         return 2
+    except Exception as exc:  # 未预期异常也要留痕，但不把 traceback 直接甩给用户
+        log.exception("未预期异常：%s", exc)
+        print("内部错误：%s: %s" % (type(exc).__name__, exc), file=sys.stderr)
+        print("详细堆栈已写入日志（默认 data/logs/app.log）", file=sys.stderr)
+        return 3
+    log.info("命令完成：%s", args.command)
     return 0
 
 

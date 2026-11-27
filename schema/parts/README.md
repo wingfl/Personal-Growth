@@ -65,7 +65,7 @@
 写完后运行：
 
 ```
-cd /d/deepseek-workspace/个人成长 && PYTHONIOENCODING=utf-8 python tools/check_part.py schema/parts/<你的文件>
+cd 个人成长 && PYTHONIOENCODING=utf-8 python tools/check_part.py schema/parts/<你的文件>
 ```
 
 输出必须为 `OK`，退出码 0。有报错就改到通过为止。

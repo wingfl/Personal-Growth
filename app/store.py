@@ -153,8 +153,15 @@ class Store:
                               proposal_id, job_id)
         return clean["id"]
 
+    def _require_mutable(self, entity):
+        """只追加表（base_group=base_append_only，如 audit_log）不允许改写与删除。"""
+        group = self.model.base_group(entity)
+        if group != "base":
+            raise ModelError("%s 使用字段组 %s，是只追加表，不支持修改或删除" % (entity, group))
+
     def update(self, entity, rid, patch, expected_revision=None, actor_type=None, remark=None,
                proposal_id=None, job_id=None):
+        self._require_mutable(entity)
         fields = self.model.fields(entity)
         before = self.get(entity, rid)
         if expected_revision is not None and int(before["revision"]) != int(expected_revision):
@@ -193,6 +200,7 @@ class Store:
 
     def soft_delete(self, entity, rid, expected_revision=None, actor_type=None, remark=None,
                     proposal_id=None, job_id=None):
+        self._require_mutable(entity)
         before = self.get(entity, rid)
         if expected_revision is not None and int(before["revision"]) != int(expected_revision):
             raise Conflict("%s %s 的 revision 已变为 %s" % (entity, rid, before["revision"]))
@@ -239,9 +247,11 @@ class Store:
         return clean["id"]
 
     def history(self, entity, rid, limit=100):
+        # 同一秒内的多条审计要按「写入顺序」倒序，而不是按 UUID 倒序：
+        # UUIDv7 只有毫秒级有序，同毫秒的随机位会让先后不可预测（见 app/ids.py:9）。
         return self.query(
             "SELECT * FROM audit_log WHERE entity_type = ? AND entity_id = ? "
-            "ORDER BY occurred_at DESC, id DESC LIMIT ?", (entity, rid, limit))
+            "ORDER BY occurred_at DESC, rowid DESC LIMIT ?", (entity, rid, limit))
 
     def commit(self):
         self.conn.commit()

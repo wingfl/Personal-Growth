@@ -1204,3 +1204,13 @@ CREATE INDEX idx_audit_log_entity_type_entity_id ON audit_log(entity_type, entit
 CREATE INDEX idx_role_record_target_type_target_id ON role_record(target_type, target_id);
 CREATE INDEX idx_material_citation_cited_entity_type_cited_entity_id ON material_citation(cited_entity_type, cited_entity_id);
 CREATE INDEX idx_change_proposal_target_entity_type_target_entity_id ON change_proposal(target_entity_type, target_entity_id);
+
+-- 只追加表的写保护（规则 A1：审计记录只增不改不删，在数据库层强制）
+CREATE TRIGGER IF NOT EXISTS trg_audit_log_no_update BEFORE UPDATE ON audit_log
+BEGIN
+  SELECT RAISE(ABORT, 'audit_log 是只追加表，不允许 UPDATE');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_audit_log_no_delete BEFORE DELETE ON audit_log
+BEGIN
+  SELECT RAISE(ABORT, 'audit_log 是只追加表，不允许 DELETE');
+END;

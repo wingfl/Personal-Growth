@@ -4,6 +4,7 @@ data/*.db-wal
 data/*.db-shm
 data/attachments/
 data/*.log
+data/logs/
 
 # 用户从飞书导出/下载的原始资料（个人工作内容）
 飞书导出/
@@ -28,3 +29,9 @@ Thumbs.db
 # 凭据文件备份
 *.bak-*
 *.bak
+
+# 备份产物（可随时重新生成，不进版本库）
+backup/
+
+# 代码索引（派生产物，可用 tools/index_code.py build 重建）
+.index/

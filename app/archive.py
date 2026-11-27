@@ -83,8 +83,12 @@ class Archive:
         return {k: v for k, v in values.items() if v is not None}
 
     def _insert(self, entity, values, fragments=(), field_name=None, proposal_id=None,
-                job_id=None, actor_type=None, remark=None):
-        """写一条记录，并把来源片段登记进 provenance_link。"""
+                job_id=None, actor_type=None, remark=None, commit=True):
+        """写一条记录，并把来源片段登记进 provenance_link。
+
+        commit=False 时只落盘不提交，供上层把多次写入组合成一个事务
+        （AI 建议确认时的写入与同批次回填必须同生共死）。
+        """
         # 服务层代表用户手工录入；AI 提取写入会显式传 origin=ai_agent（第 4 步起）
         values.setdefault("origin", "user")
         if values.get("is_fact") in (0, False) and not values.get("fact_basis"):
@@ -92,7 +96,7 @@ class Archive:
                 "标记为推断（is_fact=false）时必须写明事实依据 fact_basis（数据规则 B6）")
         rid = self.store.insert(entity, self._clean(values), actor_type=actor_type,
                                 proposal_id=proposal_id, job_id=job_id, remark=remark)
-        self.link_fragments(entity, rid, fragments, field_name=field_name)
+        self.link_fragments(entity, rid, fragments, field_name=field_name, commit=False)
         record = self.store.get(entity, rid)
         # 冗余字段 source_document_id：仅当来源片段同属一份资料时回填
         if fragments and "source_document_id" in self.model.fields(entity):
@@ -100,7 +104,8 @@ class Archive:
             if len(docs) == 1 and not record.get("source_document_id"):
                 self.store.update(entity, rid, {"source_document_id": docs.pop()})
                 record = self.store.get(entity, rid)
-        self.store.commit()
+        if commit:
+            self.store.commit()
         return record
 
     # ---- 引用解析 ---------------------------------------------------
@@ -140,7 +145,7 @@ class Archive:
     # ---- 来源追溯 ---------------------------------------------------
     def link_fragment(self, entity_type, entity_id, fragment_id,
                       relation_type="primary_source", field_name=None,
-                      match_method="manual", origin="user"):
+                      match_method="manual", origin="user", commit=True):
         """把实体（或它的某个字段）指回原始资料片段；重复关联不会产生第二条。"""
         self.model.entity(entity_type)
         self._require(entity_type, entity_id)
@@ -160,12 +165,14 @@ class Archive:
             "match_method": match_method,
             "origin": origin,
         })
-        self.store.commit()
+        if commit:
+            self.store.commit()
         return self.store.get("provenance_link", rid)
 
     def link_fragments(self, entity_type, entity_id, fragment_ids, relation_type="primary_source",
-                       field_name=None):
-        return [self.link_fragment(entity_type, entity_id, f, relation_type, field_name)
+                       field_name=None, commit=True):
+        return [self.link_fragment(entity_type, entity_id, f, relation_type, field_name,
+                                   commit=commit)
                 for f in (fragment_ids or [])]
 
     def provenance(self, entity_type, entity_id):

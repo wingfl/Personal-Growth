@@ -16,6 +16,7 @@ from datetime import date, datetime, timezone
 from xml.etree import ElementTree
 
 from .ids import date_iso, month_range, now_iso, quarter_range, week_range
+from .pathing import attachments_dir, storage_ref
 from .store import ROOT
 
 SUPPORTED_EXTS = {".txt", ".md", ".markdown", ".docx"}
@@ -449,16 +450,14 @@ def import_file(store, path, doc_type=None, source_channel="file_upload",
 
     attachment_id = None
     if archive_attachment:
-        attach_dir = os.path.join(os.path.dirname(os.path.abspath(store.db_path)), "attachments")
+        attach_dir = attachments_dir(store.db_path)
         os.makedirs(attach_dir, exist_ok=True)
         stored_name = "%s_%s" % (content_hash[:12], os.path.basename(path))
         stored_path = os.path.join(attach_dir, stored_name)
         if not os.path.exists(stored_path):
             shutil.copy2(path, stored_path)
-        try:
-            stored_ref = os.path.relpath(stored_path, ROOT).replace("\\", "/")
-        except ValueError:  # 附件与工作区不在同一个盘符时保留绝对路径
-            stored_ref = stored_path.replace("\\", "/")
+        # 统一口径：相对数据库目录（跨盘符时退回绝对路径），见 app/pathing.py
+        stored_ref = storage_ref(store.db_path, stored_path)
         attachment_id = store.insert("attachment", {
             "owner_type": "source_document",
             "owner_id": doc_id,

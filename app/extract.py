@@ -207,7 +207,9 @@ class Extraction:
         coverage = self._coverage(doc, fragments)
 
         if model and self.llm.config.model != model:
-            self.llm.config = resolve_config(model=model, timeout=self.llm.config.timeout)
+            # 只换模型名：base_url、凭据来源、timeout 都保持调用方给的那一套，
+            # 否则显式传入的 api_key/base_url 会被 resolve_config 丢弃（架构审计第 5 条）。
+            self.llm.config.model = model
 
         variables = self._variables(doc, fragments, existing_item_limit)
         messages = [
@@ -336,7 +338,6 @@ class Extraction:
     def _variables(self, doc, fragments, existing_item_limit):
         ctx = self._context(existing_item_limit)
         precision = precision_from_period(doc.get("period_start"), doc.get("period_end"))
-        schema = self.model.doc  # 供将来扩展
 
         lines = []
         for frag in fragments:
@@ -366,7 +367,6 @@ class Extraction:
             "module_type_values": self._enum_text("module_type"),
             "role_type_values": self._enum_text("role_type"),
             "date_precision_values": self._enum_text("date_precision"),
-            "_schema_keys": len(schema.get("entities", [])),
         }
 
     # ---- 建议落库 ---------------------------------------------------
@@ -594,6 +594,27 @@ class Extraction:
     def job(self, job_id):
         return self._require("ai_job", job_id)
 
+    def cleanup_stale_jobs(self, statuses=("running", "queued"), note=None):
+        """把中断的作业标成 failed。
+
+        进程被强杀（或写失败路径自身也失败）时，ai_job 会停在 running；
+        这是刻意的兜底，代价是需要一条清理命令（架构审计第 13 条）。
+        """
+        fixed = []
+        for status in statuses:
+            for row in self.store.list("ai_job", {"status": status}, limit=500,
+                                       order_by="created_at ASC"):
+                self.store.update("ai_job", row["id"], {
+                    "status": "failed",
+                    "finished_at": now_iso(),
+                    "error_code": "unknown",
+                    "error_message": note or "作业未正常结束（进程中断或写入失败），由清理命令标记",
+                })
+                fixed.append(row["id"])
+        if fixed:
+            self.store.commit()
+        return fixed
+
 
 class Review:
     """建议审核：列表、查看、确认（含改后确认）、拒绝。"""
@@ -715,9 +736,11 @@ class Review:
                                   after={"proposal_id": proposal_id, "change_type": change_type},
                                   actor_type=actor_type, proposal_id=proposal_id, job_id=job_id,
                                   remark=note or "由 AI 建议确认写入")
-        self.store.commit()
+        # 同批次「待关联」回填与本次写入放在同一个事务里提交，
+        # 否则回填失败会留下「已写入但外键未补」的部分成功状态（架构审计第 4 条）。
         relinked = self._relink_same_batch(proposal, entity, applied_id,
-                                           payload.get(NAME_FIELD.get(entity, "")))
+                                           payload.get(NAME_FIELD.get(entity, "")), commit=False)
+        self.store.commit()
         return {"proposal_id": proposal_id, "status": status, "entity": applied_entity,
                 "applied_entity_id": applied_id, "relinked": relinked}
 
@@ -754,8 +777,8 @@ class Review:
             values.setdefault("is_fact", 1)
             record = self.archive._insert(
                 entity, values, proposal_id=proposal_id, job_id=job_id, actor_type=actor_type,
-                remark=note or "由 AI 建议确认写入（内容来自模型，用户已确认）")
-            self._link_evidences(entity, record["id"], evidences)
+                remark=note or "由 AI 建议确认写入（内容来自模型，用户已确认）", commit=False)
+            self._link_evidences(entity, record["id"], evidences, commit=False)
             return entity, record["id"]
 
         if change_type == "update":
@@ -766,14 +789,14 @@ class Review:
             patch.pop("review_status", None)
             self.store.update(entity, target_id, patch, proposal_id=proposal_id, job_id=job_id,
                               actor_type=actor_type, remark=note or "由 AI 建议确认修改")
-            self._link_evidences(entity, target_id, evidences)
+            self._link_evidences(entity, target_id, evidences, commit=False)
             return entity, target_id
 
         if change_type == "link":
             target_id = proposal.get("target_entity_id")
             if not target_id:
                 raise ExtractError("关联建议缺少 target_entity_id")
-            self._link_evidences(entity, target_id, evidences)
+            self._link_evidences(entity, target_id, evidences, commit=False)
             return entity, target_id
 
         if change_type == "merge":
@@ -794,13 +817,13 @@ class Review:
 
         raise ExtractError("暂不支持的建议类型：%s（split / unlink 在后续步骤实现）" % change_type)
 
-    def _link_evidences(self, entity, entity_id, evidences):
+    def _link_evidences(self, entity, entity_id, evidences, commit=True):
         for ev in evidences:
             try:
                 self.archive.link_fragment(
                     entity, entity_id, ev["fragment_id"],
                     relation_type=ev.get("relevance_type") or "primary_source",
-                    match_method="ai_extract", origin="ai_agent")
+                    match_method="ai_extract", origin="ai_agent", commit=False)
             except (ArchiveError, ModelError):
                 continue
         doc_ids = set()
@@ -814,7 +837,8 @@ class Review:
             record = self.store.get(entity, entity_id)
             if not record.get("source_document_id"):
                 self.store.update(entity, entity_id, {"source_document_id": doc_ids.pop()})
-        self.store.commit()
+        if commit:
+            self.store.commit()
 
     def _review_duration_ms(self, proposal):
         created = proposal.get("created_at")
@@ -826,8 +850,11 @@ class Review:
             return None
         return max(0, int((datetime.now(timezone.utc) - start).total_seconds() * 1000))
 
-    def _relink_same_batch(self, proposal, entity, applied_id, name):
-        """同一批次里「待关联」的事项建议，在本条建议确认后回填外键。"""
+    def _relink_same_batch(self, proposal, entity, applied_id, name, commit=True):
+        """同一批次里「待关联」的事项建议，在本条建议确认后回填外键。
+
+        commit=False 时把提交交给调用方，保证与「写入正式档案」同属一个事务。
+        """
         if not name or entity not in FK_ON_ITEM:
             return []
         batch_id = proposal.get("batch_id")
@@ -850,6 +877,6 @@ class Review:
                 "reason": (other.get("reason") or "").replace(marker, "已关联 %s:%s" % (entity, name)),
             })
             fixed.append(other["id"])
-        if fixed:
+        if fixed and commit:
             self.store.commit()
         return fixed

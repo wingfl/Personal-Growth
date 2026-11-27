@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.importers import import_file, import_path, infer_doc_type, infer_period, parse_file
 from app.model_meta import Model, ModelError
+from app.pathing import resolve_storage_ref, storage_ref
 from app.store import Conflict, Store
 
 SAMPLE_MD = """# 2024年3月 工作月报
@@ -161,9 +162,7 @@ class TestImport(BaseCase):
 
         attachment = self.store.get("attachment", doc["attachment_id"])
         self.assertEqual(attachment["owner_type"], "source_document")
-        stored = attachment["storage_path"]
-        stored = stored if os.path.isabs(stored) else os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), stored)
+        stored = resolve_storage_ref(self.store.db_path, attachment["storage_path"])
         self.assertTrue(os.path.exists(stored), "附件副本应已落盘：%s" % stored)
         self.assertEqual(attachment["content_hash"], doc["content_hash"])
 

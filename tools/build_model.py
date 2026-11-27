@@ -448,6 +448,22 @@ def gen_ddl(model):
                 if sib in nset:
                     out.append(f"CREATE INDEX idx_{e['id']}_{f['n']}_{sib} ON {e['id']}({f['n']}, {sib});")
     out.append("")
+    out.append("-- 只追加表的写保护（规则 A1：审计记录只增不改不删，在数据库层强制）")
+    append_only = [e for e in model["entities"]
+                   if e.get("base_group", "base") == "base_append_only"]
+    for e in append_only:
+        if not any(f["n"] == "updated_at" for f in e["full_fields"]):
+            out.append(f"CREATE TRIGGER IF NOT EXISTS trg_{e['id']}_no_update "
+                       f"BEFORE UPDATE ON {e['id']}")
+            out.append("BEGIN")
+            out.append(f"  SELECT RAISE(ABORT, '{e['id']} 是只追加表，不允许 UPDATE');")
+            out.append("END;")
+        out.append(f"CREATE TRIGGER IF NOT EXISTS trg_{e['id']}_no_delete "
+                   f"BEFORE DELETE ON {e['id']}")
+        out.append("BEGIN")
+        out.append(f"  SELECT RAISE(ABORT, '{e['id']} 是只追加表，不允许 DELETE');")
+        out.append("END;")
+    out.append("")
     return "\n".join(out)
 
 
