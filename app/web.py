@@ -118,16 +118,21 @@ class Api:
         active = [p for p in projects.values()
                   if p.get("status") in ("active", "in_progress", "planning")]
         by_project = {}
+        latest_activity = {}
         for item in items:
             pid = item.get("project_id")
             if pid:
                 by_project[pid] = by_project.get(pid, 0) + 1
+                occurred = item.get("occurred_at") or ""
+                if occurred > latest_activity.get(pid, ""):
+                    latest_activity[pid] = occurred
         active_cards = sorted(
             ({"id": p["id"], "name": p["name"], "status": p.get("status"),
               "role": p.get("my_role"), "goal": p.get("goal"),
-              "updated_at": p.get("updated_at"), "item_count": by_project.get(p["id"], 0)}
+              "updated_at": p.get("updated_at"), "item_count": by_project.get(p["id"], 0),
+              "last_activity": latest_activity.get(p["id"])}
              for p in active),
-            key=lambda row: row["updated_at"] or "", reverse=True)
+            key=lambda row: (row["last_activity"] or "", row["updated_at"] or ""), reverse=True)
 
         missing_domain = [item for item in items if not item.get("domain_id")]
         missing_goal = [p for p in active if not (p.get("goal") or "").strip()]

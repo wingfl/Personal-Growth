@@ -36,7 +36,7 @@ export function Insights() {
     return {
       grid: { left: 8, right: 12, top: 30, bottom: 4, containLabel: true },
       tooltip: { trigger: "axis" },
-      legend: { top: 0, right: 0, itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 11 } },
+      legend: { top: 0, right: 0, itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 12 } },
       xAxis: {
         type: "category",
         data: weeks.map((point) => point.label),
@@ -47,7 +47,7 @@ export function Insights() {
       yAxis: {
         type: "value",
         splitLine: { lineStyle: { color: "rgba(128,128,128,.15)" } },
-        axisLabel: { fontSize: 11 },
+        axisLabel: { fontSize: 12, color: "#71717a" },
       },
       series: [
         {
@@ -74,13 +74,13 @@ export function Insights() {
     return {
       grid: { left: 8, right: 24, top: 8, bottom: 4, containLabel: true },
       tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-      xAxis: { type: "value", splitLine: { lineStyle: { color: "rgba(128,128,128,.15)" } }, axisLabel: { fontSize: 11 } },
+      xAxis: { type: "value", splitLine: { lineStyle: { color: "rgba(128,128,128,.15)" } }, axisLabel: { fontSize: 12 } },
       yAxis: {
         type: "category",
         data: rows.map((row) => TYPE_LABEL[row.key] ?? row.key),
         axisTick: { show: false },
         axisLine: { show: false },
-        axisLabel: { fontSize: 11 },
+        axisLabel: { fontSize: 12, color: "#71717a" },
       },
       series: [
         {
@@ -119,7 +119,7 @@ export function Insights() {
         data: ["一", "二", "三", "四", "五", "六", "日"],
         axisTick: { show: false },
         axisLine: { show: false },
-        axisLabel: { fontSize: 11 },
+        axisLabel: { fontSize: 12, color: "#71717a" },
       },
       visualMap: {
         min: 0,
@@ -150,7 +150,7 @@ export function Insights() {
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">数据分析</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            只展示有真实数据支撑的图；数据不够的模块会说明缺什么
+            只用真实数据；数据不够的地方直接说明
           </p>
         </div>
         <div className="flex items-center gap-1 rounded-md border border-border bg-card p-0.5">
@@ -194,7 +194,7 @@ export function Insights() {
           <CardHeader>
             <div>
               <CardTitle>工作构成</CardTitle>
-              <CardDescription>事项按类型分布，用来判断时间投向</CardDescription>
+              <CardDescription>按事项类型</CardDescription>
             </div>
           </CardHeader>
           <CardContent className="pt-1">
@@ -212,7 +212,7 @@ export function Insights() {
           <CardHeader>
             <div>
               <CardTitle>活跃热力图</CardTitle>
-              <CardDescription>周 × 星期，颜色越深记录越多；周报只有「周」精度，统一落在周一，所以深色带在周一</CardDescription>
+              <CardDescription>颜色越深记录越多；周报精度为「周」，落在周一</CardDescription>
             </div>
           </CardHeader>
           <CardContent className="pt-1">
@@ -232,7 +232,7 @@ export function Insights() {
           <CardHeader>
             <div>
               <CardTitle>能力雷达</CardTitle>
-              <CardDescription>能力证据按评价维度聚合</CardDescription>
+              <CardDescription>按评价维度聚合</CardDescription>
             </div>
             <Badge variant="warning">数据未建立</Badge>
           </CardHeader>
@@ -249,7 +249,7 @@ export function Insights() {
           <CardHeader>
             <div>
               <CardTitle>阶段对比</CardTitle>
-              <CardDescription>不同阶段的产出与能力变化</CardDescription>
+              <CardDescription>不同阶段的能力变化</CardDescription>
             </div>
             <Badge variant="warning">数据未建立</Badge>
           </CardHeader>

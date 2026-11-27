@@ -58,7 +58,7 @@ function GoalRow({ goal }: { goal: GoalCard }) {
   const percent = Math.max(0, Math.min(100, goal.progress_percent));
   const late = goal.status !== "achieved" && (goal.days_left ?? 1) < 0;
   return (
-    <Card className="p-5">
+    <Card className="p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -96,9 +96,8 @@ export function Goals() {
     <div className="space-y-5">
       <section>
         <h2 className="text-2xl font-semibold tracking-tight">成长目标</h2>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          这里不是工作目标：是你为自己定的、可验收的成长目标（能力、经验、成果、资料补全），
-          有周期、达成标准和进度；下面再列出系统按真实数据算出的「下一步该补什么」。
+        <p className="mt-2 max-w-2xl text-base text-muted-foreground">
+          你为自己定的、可验收的成长目标；下面是根据真实数据算出的补全建议。
         </p>
       </section>
 
@@ -140,7 +139,7 @@ export function Goals() {
                   const severity = SEVERITY[suggestion.severity] ?? SEVERITY.low;
                   const target = suggestion.id === "capability-gap" ? "/insights" : "/archive";
                   return (
-                    <Card key={suggestion.id} className="p-5">
+                    <Card key={suggestion.id} className="p-6">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="flex items-start gap-3">
                           <div className="mt-0.5 rounded-md bg-primary-weak p-1.5 text-primary">

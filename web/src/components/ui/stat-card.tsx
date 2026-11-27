@@ -42,10 +42,10 @@ export function StatCard({
   const falling = typeof delta === "number" && delta < 0;
   return (
     <Card
-      className={cn("p-5", onClick && "cursor-pointer transition-colors hover:bg-muted/40")}
+      className={cn("p-6", onClick && "cursor-pointer transition-colors hover:bg-muted/40")}
       onClick={onClick}
     >
-      <div className="text-sm text-muted-foreground">{label}</div>
+      <div className="text-sm font-medium text-muted-foreground">{label}</div>
       <div className="mt-1 flex items-baseline gap-2">
         <span className="num text-3xl font-semibold tracking-tight">{value}</span>
         {typeof delta === "number" && (

@@ -3,7 +3,7 @@ import { FileClock, TerminalSquare } from "lucide-react";
 import { useApi } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/input";
 import { EmptyState, ErrorState, PageSkeleton } from "@/components/ui/states";
 import { readable } from "@/lib/labels";
@@ -45,8 +45,8 @@ export function Review() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">复盘</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            资料是原料，建议是半成品；确认之后才写进正式档案。首期只读，确认/拒绝仍在命令行。
+          <p className="mt-2 text-base text-muted-foreground">
+            确认之后才会写进正式档案
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => { docs.reload(); proposals.reload(); }}>
@@ -161,7 +161,7 @@ export function Review() {
             <CardHeader>
               <div>
                 <CardTitle className="text-base">确认一条建议</CardTitle>
-                <CardDescription>写操作留在命令行，避免在没有鉴权的界面上改档案</CardDescription>
+                
               </div>
               <TerminalSquare className="h-4 w-4 text-muted-foreground" aria-hidden />
             </CardHeader>

@@ -14,7 +14,7 @@ export default function App() {
       <Sidebar />
       <div className="min-w-0 flex-1">
         <Topbar />
-        <main className="mx-auto w-full max-w-[1200px] px-4 py-6 md:px-8 md:py-8">
+        <main className="mx-auto w-full max-w-[1280px] px-4 py-6 md:px-10 md:py-10">
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/archive" element={<Archive />} />

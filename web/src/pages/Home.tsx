@@ -24,12 +24,12 @@ function trendOption(summary: Summary) {
       data: weeks.map((point) => point.label),
       axisLine: { lineStyle: { color: "rgba(128,128,128,.35)" } },
       axisTick: { show: false },
-      axisLabel: { fontSize: 11 },
+      axisLabel: { fontSize: 12, color: "#71717a" },
     },
     yAxis: {
       type: "value",
       splitLine: { lineStyle: { color: "rgba(128,128,128,.15)" } },
-      axisLabel: { fontSize: 11 },
+      axisLabel: { fontSize: 12, color: "#71717a" },
     },
     series: [
       {
@@ -72,8 +72,8 @@ export function Home() {
       <section className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">你现在的成长状态</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            共 {counts.documents} 篇资料、{counts.fragments} 个片段，已沉淀 {counts.items} 条工作事项
+          <p className="mt-2 text-base text-muted-foreground">
+            {counts.documents} 篇资料 · {counts.fragments} 个片段 · {counts.items} 条事项
           </p>
         </div>
         <Button asChild variant="outline" size="sm">
@@ -84,13 +84,13 @@ export function Home() {
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="累计事项" value={counts.items} hint="来自周报与月报" series={series} />
+        <StatCard label="累计事项" value={counts.items}  series={series} />
         <StatCard label="进行中项目" value={counts.active_projects} hint={`共 ${counts.projects} 个项目`} />
         <StatCard label="覆盖资料" value={counts.documents} hint={`${counts.fragments} 个原文片段`} />
         <StatCard
           label="待处理建议"
           value={todos.pending_proposals}
-          hint="提取待确认，写操作仍在命令行"
+          hint={todos.pending_proposals > 0 ? "去复盘页确认" : undefined}
           delta={null}
         />
       </section>
@@ -113,28 +113,36 @@ export function Home() {
           <CardHeader>
             <div>
               <CardTitle>需要处理</CardTitle>
-              <CardDescription>不影响浏览，但会影响分析完整度</CardDescription>
             </div>
           </CardHeader>
-          <CardContent className="space-y-3 pt-1">
-            <TodoRow
-              to="/review"
-              label="待审建议"
-              value={todos.pending_proposals}
-              hint="在 CLI 用 ai confirm 处理"
-            />
-            <TodoRow
-              to="/archive"
-              label="事项缺工作领域"
-              value={todos.items_missing_domain}
-              hint="补领域后领域分布才准确"
-            />
-            <TodoRow
-              to="/goals"
-              label="项目缺目标"
-              value={todos.projects_missing_goal}
-              hint="补目标后才能判断方向"
-            />
+          <CardContent className="space-y-1 pt-2">
+            {todos.pending_proposals === 0 &&
+            todos.items_missing_domain === 0 &&
+            todos.projects_missing_goal === 0 ? (
+              <p className="px-1 py-2 text-sm text-muted-foreground">没有需要处理的事项</p>
+            ) : (
+              <>
+                {todos.pending_proposals > 0 && (
+                  <TodoRow to="/review" label="待审建议" value={todos.pending_proposals} hint="去复盘页确认" />
+                )}
+                {todos.items_missing_domain > 0 && (
+                  <TodoRow
+                    to="/archive"
+                    label="事项缺工作领域"
+                    value={todos.items_missing_domain}
+                    hint="补齐后领域分布才准确"
+                  />
+                )}
+                {todos.projects_missing_goal > 0 && (
+                  <TodoRow
+                    to="/goals"
+                    label="项目缺目标"
+                    value={todos.projects_missing_goal}
+                    hint="补目标才能判断方向"
+                  />
+                )}
+              </>
+            )}
           </CardContent>
         </Card>
       </section>
@@ -144,7 +152,6 @@ export function Home() {
           <CardHeader>
             <div>
               <CardTitle>最近记录</CardTitle>
-              <CardDescription>按时间倒序，来自已入库的周报与月报</CardDescription>
             </div>
             <Button asChild variant="ghost" size="sm">
               <Link to="/archive">全部</Link>
@@ -184,7 +191,6 @@ export function Home() {
           <CardHeader>
             <div>
               <CardTitle>项目组合</CardTitle>
-              <CardDescription>最近有活动的进行中项目</CardDescription>
             </div>
             <Button asChild variant="ghost" size="sm">
               <Link to="/archive">全部</Link>
@@ -215,10 +221,12 @@ export function Home() {
                   <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                     {project.goal || "还没写目标"}
                   </div>
-                  <div className="mt-2 flex items-center gap-1.5 text-2xs text-muted-foreground">
-                    <Sparkles className="h-3 w-3" aria-hidden />
-                    {project.my_role || "未填角色"} · 最近 {day(project.last_activity)}
-                  </div>
+                  {project.last_activity ? (
+                    <div className="mt-2 flex items-center gap-1.5 text-2xs text-muted-foreground">
+                      <Sparkles className="h-3 w-3" aria-hidden />
+                      最近 {day(project.last_activity)}
+                    </div>
+                  ) : null}
                 </Link>
               ))
             )}

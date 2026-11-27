@@ -62,8 +62,8 @@ export function Archive() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">成长档案</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            每条记录都能回溯到原文；这里只读，改动请用命令行
+          <p className="mt-2 text-base text-muted-foreground">
+            每条记录都可回溯到原文片段
           </p>
         </div>
       </div>

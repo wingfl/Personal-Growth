@@ -31,8 +31,8 @@ export function Settings() {
     <div className="space-y-5">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">设置</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          界面只读：所有改动与运维动作都在命令行完成，界面只负责展示与解释
+        <p className="mt-2 text-base text-muted-foreground">
+          界面只读，所有改动走命令行
         </p>
       </div>
 
@@ -47,7 +47,7 @@ export function Settings() {
               <CardHeader>
                 <div>
                   <CardTitle className="text-base">身份与角色</CardTitle>
-                  <CardDescription>分析时用它理解「你处在什么位置」，不是账号系统</CardDescription>
+                  <CardDescription>分析时用来理解你的语境</CardDescription>
                 </div>
                 <UserRound className="h-4 w-4 text-muted-foreground" aria-hidden />
               </CardHeader>
