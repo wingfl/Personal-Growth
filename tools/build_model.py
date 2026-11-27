@@ -43,7 +43,7 @@ SQL_TYPE = {
 # 生成 DDL 时不再重复建表的纯关联表（仍会在模型中保留）
 LINK_TABLES = None  # 由实体定义推导，不硬编码
 
-LAYER_ORDER = ["00_base", "01_source", "02_experience", "03_achievement", "04_portrait", "05_growth", "06_ai"]
+LAYER_ORDER = ["00_base", "01_source", "02_experience", "03_achievement", "04_portrait", "05_growth", "06_ai", "07_market"]
 
 
 def load_json(path):
@@ -194,7 +194,7 @@ def gen_overview(model):
     lines = []
     names = {"00_base": "基础与横切机制", "01_source": "01 原始资料层", "02_experience": "02 工作经历",
              "03_achievement": "03 成果沉淀", "04_portrait": "04 个人画像层", "05_growth": "05 成长分析与输出层",
-             "06_ai": "AI 与数据运维"}
+             "06_ai": "AI 与数据运维", "07_market": "就业市场样本"}
     for layer in LAYER_ORDER:
         ents = [e for e in model["entities"] if e["layer"] == layer]
         if not ents:
@@ -219,7 +219,7 @@ def gen_enums(model):
 def gen_entities(model):
     names = {"00_base": "基础与横切机制", "01_source": "01 原始资料层", "02_experience": "02 工作经历",
              "03_achievement": "03 成果沉淀", "04_portrait": "04 个人画像层", "05_growth": "05 成长分析与输出层",
-             "06_ai": "AI 与数据运维"}
+             "06_ai": "AI 与数据运维", "07_market": "就业市场样本"}
     lines = []
     for layer in LAYER_ORDER:
         ents = [e for e in model["entities"] if e["layer"] == layer]

@@ -1,0 +1,13 @@
+{
+  "name": "growth-collector",
+  "private": true,
+  "version": "0.1.0",
+  "description": "个人成长系统的招聘市场采集器（独立于 app/，不影响产品零依赖）",
+  "type": "commonjs",
+  "scripts": {
+    "collect": "node run.js"
+  },
+  "dependencies": {
+    "puppeteer-core": "^25.19.0"
+  }
+}

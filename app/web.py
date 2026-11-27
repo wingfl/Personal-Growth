@@ -385,6 +385,35 @@ class Api:
             "items": rows,
         }
 
+    def market(self, city=None):
+        """市场定位：平台样本的薪资带与高频要求，与本人当前薪资对照。"""
+        from .market import summary as market_summary
+        from .roles import playbook
+        data = market_summary(self.store, city=city)
+        profile = self.profile()
+        role = (profile.get("current_title") or "").strip()
+        current = profile.get("current_salary")
+        target = profile.get("expected_salary")
+        groups = []
+        for g in data["groups"]:
+            item = dict(g)
+            if current and g.get("salary_p50"):
+                item["vs_current_pct"] = round((g["salary_p50"] - current) * 100.0 / current, 1)
+            groups.append(item)
+        return {
+            "generated_at": data["generated_at"],
+            "role": role,
+            "city": city or (profile.get("city") or ""),
+            "cities": data["cities"],
+            "total_postings": data["total_postings"],
+            "current_salary": current,
+            "expected_salary": target,
+            "groups": groups,
+            "chain": playbook(role)[0] if role else None,
+            "caveat": "样本来自公开招聘列表（不含 JD 正文与候选人信息）；薪资为区间中值折算，"
+                      "不含年终奖口径差异，样本量小时仅供参考。",
+        }
+
     def capability(self, capability_id):
         from .capability import capability_evidence
         row = self.store.get("capability", capability_id)
@@ -405,6 +434,8 @@ class Api:
             "current_company": "company", "industry": "industry",
             "work_start_date": "work_start_date", "target_position": "target_position",
             "location_city": "city", "summary": "summary",
+            "years_of_experience": "years_of_experience",
+            "current_salary": "current_salary", "expected_salary": "expected_salary",
         }
         return {"exists": True, **{out: row.get(col) for col, out in mapping.items()}}
 
@@ -549,6 +580,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(api.goals())
             if path == "/api/profile":
                 return self._json(api.profile())
+            if path == "/api/market":
+                return self._json(api.market(params.get("city")))
             if path == "/api/capabilities":
                 return self._json(api.capabilities())
             if path.startswith("/api/capabilities/"):

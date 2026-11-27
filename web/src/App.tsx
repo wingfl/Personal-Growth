@@ -5,6 +5,7 @@ import { Home } from "./pages/Home";
 import { Archive } from "./pages/Archive";
 import { Insights } from "./pages/Insights";
 import { Capabilities } from "./pages/Capabilities";
+import { Market } from "./pages/Market";
 import { Goals } from "./pages/Goals";
 import { Review } from "./pages/Review";
 import { Settings } from "./pages/Settings";
@@ -21,6 +22,7 @@ export default function App() {
             <Route path="/archive" element={<Archive />} />
             <Route path="/insights" element={<Insights />} />
             <Route path="/capabilities" element={<Capabilities />} />
+            <Route path="/market" element={<Market />} />
             <Route path="/goals" element={<Goals />} />
             <Route path="/review" element={<Review />} />
             <Route path="/settings" element={<Settings />} />

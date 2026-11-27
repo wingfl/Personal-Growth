@@ -13,6 +13,7 @@
 | 4 | AI 提取、匹配、归并、审核 | ✅ `app/llm.py` + `app/extract.py` + `ai` 命令组 |
 | 界面 | 本地只读 Web UI（P0+P1） | ✅ `app/web.py` + `web/`（React + Vite + ECharts） |
 | 5 | 能力词典、能力证据与能力画像 | ✅ `app/capability.py` + 「能力画像」页 |
+| 6 前哨 | 就业市场样本与市场定位 | ✅ `collector/` + `app/market.py` + 「市场定位」页 |
 | 6–10 | 特征画像、成长曲线、成果与材料、Agent 接入、备份迁移 | ⬜ 未开始 |
 
 ## 目录结构
@@ -261,6 +262,24 @@ python -m app.cli feishu logout        # 清除本机保存的用户令牌
 - **查看**：`capability list`、`capability evidence CODE`，或界面「能力画像」页（雷达 + 分类卡片 +
   最近一条原文）。`/api/capabilities` 只读。
 
+## 就业市场样本与市场定位（第 6 步前哨）
+
+这一块回答的是「我现在的薪资和岗位要求，在本地市场上大概是什么位置」，只看**招聘信息**，
+不碰简历、不做账号体系。
+
+- **采集**：`collector/` 是独立 Node 工程（`npm i` 后 `npm run collect`），用本机 Edge 打开 51job
+  搜索页，在页面上下文里调用列表接口；只取列表级结构化字段（薪资、经验、学历、标签、公司），
+  不抓详情页正文、不登录。产出 `data/market/raw/<周>/51job-<城市>-<日期>.jsonl`。
+  51job 有 WAF 与速度限制，脚本限速、单页异常即停，遇到验证码请停一段时间再跑。
+- **入库**：`python -m app.cli market ingest data/market/raw/...jsonl`，按 `(platform, external_id)`
+  去重；`market summary` 打印各方向样本数、薪资 P25/P50/P75 与高频标签。
+- **口径**：薪资取招聘方给的区间中值，分位数由样本线性插值；样本少时三个分位会接近，页面不据此下结论。
+  高频标签是招聘方的描述习惯，不等于硬门槛；要判断「该补什么」，回到能力画像的证据缺口。
+- **看板**：界面「市场定位」页（`/api/market`），按方向显示 P25–P75 区间、中位和你当前月薪的位置；
+  `target_role` 可多选，也可 `market role-add` 自由新增。
+- **限制**：BOSS / 猎聘 / 智联的搜索接口都有签名或风控，匿名环境拿不到结构化列表，本仓库不提供绕过方案；
+  官方统计（国家统计局分行业工资）粒度到行业不到岗位，只能作为背景基准。
+
 ## AI 提取与审核时的口径说明（第 4 步）
 
 - **模型来源**：默认读本机 DSH 配置（`~/.dsh/profiles/<profile>/cordis.patch.yml` 的 `baseURL`
@@ -298,5 +317,7 @@ python -m app.cli feishu logout        # 清除本机保存的用户令牌
   `work_theme` + `theme_member` 相似度处理。
 - 界面首期只读：审核写操作、导出图片、键盘快捷流在 P2（`docs/UI设计方案.md` 第 9 节）。
 - 能力雷达已可用（第 5 步）；阶段对比与成长曲线仍为空态：它们依赖第 7 步的 `growth_stage` / `growth_snapshot` 数据。
+- 市场定位只覆盖 51job 列表样本，且没有 JD 正文：`job_requirement` 表已建好，等后续解析 JD 后再写入；
+  `salary_benchmark` 也还没有录入行业报告口径的数据。
 - 模板与设计文档中的 3 条待确认问题（材料引用粒度、多人协作、confidence 是否用于自动通过）
   仍需产品决策。

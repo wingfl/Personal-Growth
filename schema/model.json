@@ -1875,12 +1875,162 @@
         ]
       ]
     },
+    "job_platform": {
+      "l": "招聘平台",
+      "v": [
+        [
+          "51job",
+          "前程无忧",
+          "列表接口可结构化采集，含薪资/经验/学历/标签"
+        ],
+        [
+          "boss",
+          "BOSS直聘",
+          "反爬严格，暂不采集"
+        ],
+        [
+          "liepin",
+          "猎聘",
+          "有官方 MCP，面向求职者查询，不适合批量分析"
+        ],
+        [
+          "zhaopin",
+          "智联招聘",
+          "反爬严格，暂不采集"
+        ],
+        [
+          "lagou",
+          "拉勾",
+          "反爬严格，暂不采集"
+        ],
+        [
+          "other",
+          "其他来源",
+          "人工整理或第三方数据"
+        ]
+      ]
+    },
+    "salary_period": {
+      "l": "薪资周期",
+      "v": [
+        [
+          "month",
+          "月薪",
+          "统一折算到月薪用于对比"
+        ],
+        [
+          "year",
+          "年薪",
+          "原文按年给出，入库时折算为月薪"
+        ],
+        [
+          "day",
+          "日薪",
+          "按天计价，不折算"
+        ],
+        [
+          "hour",
+          "时薪",
+          "按小时计价，不折算"
+        ]
+      ]
+    },
+    "requirement_type": {
+      "l": "岗位要求类型",
+      "v": [
+        [
+          "skill",
+          "专业技能",
+          "岗位要求中可直接对应能力词典的技能项"
+        ],
+        [
+          "experience",
+          "经验年限",
+          "工作年限、行业年限要求"
+        ],
+        [
+          "education",
+          "学历",
+          "学历门槛"
+        ],
+        [
+          "domain",
+          "行业领域",
+          "行业或业务领域背景"
+        ],
+        [
+          "tool",
+          "工具/平台",
+          "具体工具、平台、系统（如 Adjust、SQL、Figma）"
+        ],
+        [
+          "soft",
+          "软技能",
+          "沟通、推动、协作等"
+        ],
+        [
+          "responsibility",
+          "职责范围",
+          "该岗位要负责什么"
+        ],
+        [
+          "other",
+          "其他",
+          "无法归入以上类型"
+        ]
+      ]
+    },
+    "role_family": {
+      "l": "岗位族",
+      "v": [
+        [
+          "product",
+          "产品",
+          "产品经理、产品设计等"
+        ],
+        [
+          "design",
+          "设计",
+          "交互、视觉、UI/UX"
+        ],
+        [
+          "engineering",
+          "研发",
+          "前端、后端、算法、数据"
+        ],
+        [
+          "qa",
+          "测试",
+          "质量保障"
+        ],
+        [
+          "operations",
+          "运营",
+          "用户、内容、活动运营"
+        ],
+        [
+          "management",
+          "管理",
+          "团队与项目管理"
+        ],
+        [
+          "other",
+          "其他",
+          "不属于以上岗位族"
+        ]
+      ]
+    },
     "entity_type": {
       "l": "实体类型（多态引用目标，由实体清单自动生成）",
       "v": [
         [
           "user_profile",
           "用户档案",
+          "00_base"
+        ],
+        [
+          "target_role",
+          "目标岗位",
           "00_base"
         ],
         [
@@ -2102,6 +2252,26 @@
           "backup_record",
           "备份与迁移记录",
           "06_ai"
+        ],
+        [
+          "job_posting",
+          "岗位样本",
+          "07_market"
+        ],
+        [
+          "job_requirement",
+          "岗位要求",
+          "07_market"
+        ],
+        [
+          "salary_benchmark",
+          "薪资基准",
+          "07_market"
+        ],
+        [
+          "market_snapshot",
+          "市场快照",
+          "07_market"
         ]
       ]
     }
@@ -2143,6 +2313,49 @@
           "d": "用户自述的概述，属于事实/自述，不得由 AI 直接改写正式版本"
         },
         {
+          "n": "current_company",
+          "l": "当前公司",
+          "t": "string",
+          "d": "材料抬头与市场对比使用。"
+        },
+        {
+          "n": "industry",
+          "l": "行业",
+          "t": "string",
+          "d": "当前所在行业。"
+        },
+        {
+          "n": "location_city",
+          "l": "所在城市",
+          "t": "string",
+          "idx": true,
+          "d": "用于市场薪资对比。"
+        },
+        {
+          "n": "target_position",
+          "l": "目标职位",
+          "t": "string",
+          "d": "用户期望的下一步职位，可空。"
+        },
+        {
+          "n": "years_of_experience",
+          "l": "工作年限",
+          "t": "integer",
+          "d": "整年；由 work_start_date 估算或用户填写。"
+        },
+        {
+          "n": "current_salary",
+          "l": "当前月薪",
+          "t": "integer",
+          "d": "元/月，用户自填；用于自我定位。"
+        },
+        {
+          "n": "expected_salary",
+          "l": "期望月薪",
+          "t": "integer",
+          "d": "元/月，用户自填。"
+        },
+        {
           "n": "email",
           "l": "联系邮箱",
           "t": "string",
@@ -2156,34 +2369,10 @@
           "d": "用户可能填写的联系电话，仅用于简历等材料抬头；可为空，导出对外材料时默认不输出。"
         },
         {
-          "n": "current_company",
-          "l": "当前任职公司",
-          "t": "string",
-          "d": "用户填写的当前雇主名称，用于简历与述职材料的「现任职」表述；不得由 AI 依据资料推断后直接写入。"
-        },
-        {
           "n": "current_title_start_date",
           "l": "当前职位起始日期",
           "t": "date",
           "d": "用户填入当前职位的起始日期，用于计算当前职位任职时长；只精确到月时按当月首日存储。"
-        },
-        {
-          "n": "target_position",
-          "l": "目标岗位",
-          "t": "string",
-          "d": "用户填写的求职或晋升目标岗位，供材料生成选择重点方向使用；属于用户意图，不得由 AI 代填。"
-        },
-        {
-          "n": "location_city",
-          "l": "常驻城市",
-          "t": "string",
-          "d": "用户工作所在城市，用于简历基本信息与异地经历说明；用户未填写时保持为空而不猜测。"
-        },
-        {
-          "n": "industry",
-          "l": "所属行业",
-          "t": "string",
-          "d": "用户主要从业行业，用于材料中的行业背景描述；可由用户从字典选择或自行填写。"
         }
       ],
       "rules": [
@@ -2229,6 +2418,49 @@
           "d": "用户自述的概述，属于事实/自述，不得由 AI 直接改写正式版本"
         },
         {
+          "n": "current_company",
+          "l": "当前公司",
+          "t": "string",
+          "d": "材料抬头与市场对比使用。"
+        },
+        {
+          "n": "industry",
+          "l": "行业",
+          "t": "string",
+          "d": "当前所在行业。"
+        },
+        {
+          "n": "location_city",
+          "l": "所在城市",
+          "t": "string",
+          "d": "用于市场薪资对比。",
+          "idx": true
+        },
+        {
+          "n": "target_position",
+          "l": "目标职位",
+          "t": "string",
+          "d": "用户期望的下一步职位，可空。"
+        },
+        {
+          "n": "years_of_experience",
+          "l": "工作年限",
+          "t": "integer",
+          "d": "整年；由 work_start_date 估算或用户填写。"
+        },
+        {
+          "n": "current_salary",
+          "l": "当前月薪",
+          "t": "integer",
+          "d": "元/月，用户自填；用于自我定位。"
+        },
+        {
+          "n": "expected_salary",
+          "l": "期望月薪",
+          "t": "integer",
+          "d": "元/月，用户自填。"
+        },
+        {
           "n": "email",
           "l": "联系邮箱",
           "t": "string",
@@ -2242,34 +2474,192 @@
           "d": "用户可能填写的联系电话，仅用于简历等材料抬头；可为空，导出对外材料时默认不输出。"
         },
         {
-          "n": "current_company",
-          "l": "当前任职公司",
-          "t": "string",
-          "d": "用户填写的当前雇主名称，用于简历与述职材料的「现任职」表述；不得由 AI 依据资料推断后直接写入。"
-        },
-        {
           "n": "current_title_start_date",
           "l": "当前职位起始日期",
           "t": "date",
           "d": "用户填入当前职位的起始日期，用于计算当前职位任职时长；只精确到月时按当月首日存储。"
         },
         {
-          "n": "target_position",
-          "l": "目标岗位",
-          "t": "string",
-          "d": "用户填写的求职或晋升目标岗位，供材料生成选择重点方向使用；属于用户意图，不得由 AI 代填。"
+          "n": "origin",
+          "l": "数据来源",
+          "t": "enum",
+          "e": "origin",
+          "req": true,
+          "d": "区分用户主动录入与 AI 推断，是事实/推断区分的载体"
         },
         {
-          "n": "location_city",
-          "l": "常驻城市",
-          "t": "string",
-          "d": "用户工作所在城市，用于简历基本信息与异地经历说明；用户未填写时保持为空而不猜测。"
+          "n": "created_at",
+          "l": "创建时间",
+          "t": "datetime",
+          "req": true,
+          "d": "记录首次写入时间（UTC）"
         },
         {
-          "n": "industry",
-          "l": "所属行业",
+          "n": "updated_at",
+          "l": "更新时间",
+          "t": "datetime",
+          "req": true,
+          "d": "最后一次正式变更时间，同步冲突判定依据"
+        },
+        {
+          "n": "revision",
+          "l": "版本号",
+          "t": "integer",
+          "req": true,
+          "def": "1",
+          "d": "每次正式变更 +1；材料与档案的版本回溯依据"
+        },
+        {
+          "n": "deleted_at",
+          "l": "删除时间",
+          "t": "datetime",
+          "d": "软删除标记；非空即视为已删除，历史保留在 audit_log"
+        }
+      ]
+    },
+    {
+      "id": "target_role",
+      "layer": "00_base",
+      "name": "目标岗位",
+      "priority": "P1",
+      "flags": [
+        "origin"
+      ],
+      "purpose": "用户关注的求职/发展方向（可多个、可自由新增），是市场数据采集与分析的口径来源；不绑定具体公司。",
+      "fields": [
+        {
+          "n": "name",
+          "l": "岗位名称",
           "t": "string",
-          "d": "用户主要从业行业，用于材料中的行业背景描述；可由用户从字典选择或自行填写。"
+          "req": true,
+          "idx": true,
+          "u": true,
+          "d": "如「AI产品经理」；同一档案内不重复。"
+        },
+        {
+          "n": "role_family",
+          "l": "岗位族",
+          "t": "enum",
+          "e": "role_family",
+          "req": true,
+          "idx": true,
+          "d": "决定套用哪套能力框架与岗位链路。",
+          "def": "product"
+        },
+        {
+          "n": "city",
+          "l": "城市",
+          "t": "string",
+          "idx": true,
+          "d": "目标城市，用于薪资与需求对比。"
+        },
+        {
+          "n": "keywords",
+          "l": "检索关键词",
+          "t": "json",
+          "d": "采集时使用的关键词数组，可包含同义写法。"
+        },
+        {
+          "n": "level",
+          "l": "目标层级",
+          "t": "string",
+          "d": "如初级/中级/高级/专家，可空。"
+        },
+        {
+          "n": "is_primary",
+          "l": "主要方向",
+          "t": "boolean",
+          "d": "主要方向在首页优先展示。",
+          "def": "false"
+        },
+        {
+          "n": "is_active",
+          "l": "启用",
+          "t": "boolean",
+          "idx": true,
+          "d": "停用的方向不再采集，但保留历史数据。",
+          "def": "true"
+        },
+        {
+          "n": "notes",
+          "l": "说明",
+          "t": "text",
+          "d": "为什么关注这个方向、期望的转变。"
+        }
+      ],
+      "rules": [
+        "同一档案内 `name` 唯一。",
+        "`keywords` 为空时采集器回落到 `name`。"
+      ],
+      "notes": [
+        "与 capability 的关系：岗位族决定加载哪一套能力词典；能力本身仍按个人证据积累。"
+      ],
+      "full_fields": [
+        {
+          "n": "id",
+          "l": "主键",
+          "t": "uuid",
+          "req": true,
+          "d": "UUIDv7；客户端可离线生成，按时间有序"
+        },
+        {
+          "n": "name",
+          "l": "岗位名称",
+          "t": "string",
+          "d": "如「AI产品经理」；同一档案内不重复。",
+          "req": true,
+          "idx": true,
+          "u": true
+        },
+        {
+          "n": "role_family",
+          "l": "岗位族",
+          "t": "enum",
+          "d": "决定套用哪套能力框架与岗位链路。",
+          "e": "role_family",
+          "req": true,
+          "idx": true,
+          "def": "product"
+        },
+        {
+          "n": "city",
+          "l": "城市",
+          "t": "string",
+          "d": "目标城市，用于薪资与需求对比。",
+          "idx": true
+        },
+        {
+          "n": "keywords",
+          "l": "检索关键词",
+          "t": "json",
+          "d": "采集时使用的关键词数组，可包含同义写法。"
+        },
+        {
+          "n": "level",
+          "l": "目标层级",
+          "t": "string",
+          "d": "如初级/中级/高级/专家，可空。"
+        },
+        {
+          "n": "is_primary",
+          "l": "主要方向",
+          "t": "boolean",
+          "d": "主要方向在首页优先展示。",
+          "def": "false"
+        },
+        {
+          "n": "is_active",
+          "l": "启用",
+          "t": "boolean",
+          "d": "停用的方向不再采集，但保留历史数据。",
+          "idx": true,
+          "def": "true"
+        },
+        {
+          "n": "notes",
+          "l": "说明",
+          "t": "text",
+          "d": "为什么关注这个方向、期望的转变。"
         },
         {
           "n": "origin",
@@ -14144,6 +14534,909 @@
           "d": "软删除标记；非空即视为已删除，历史保留在 audit_log"
         }
       ]
+    },
+    {
+      "id": "job_posting",
+      "layer": "07_market",
+      "name": "岗位样本",
+      "priority": "P1",
+      "flags": [],
+      "purpose": "从招聘平台采到的单条岗位信息（列表级结构化数据），是市场薪资、要求频次与趋势的原始样本；不采集候选人简历。",
+      "fields": [
+        {
+          "n": "platform",
+          "l": "平台",
+          "t": "enum",
+          "e": "job_platform",
+          "req": true,
+          "idx": true,
+          "d": "数据来源平台。"
+        },
+        {
+          "n": "external_id",
+          "l": "平台内 ID",
+          "t": "string",
+          "req": true,
+          "d": "用于去重与回链。"
+        },
+        {
+          "n": "title",
+          "l": "岗位标题",
+          "t": "string",
+          "req": true,
+          "idx": true,
+          "d": "原文标题。"
+        },
+        {
+          "n": "company",
+          "l": "公司",
+          "t": "string",
+          "d": "原文公司名。"
+        },
+        {
+          "n": "city",
+          "l": "城市",
+          "t": "string",
+          "idx": true,
+          "d": "工作城市。"
+        },
+        {
+          "n": "district",
+          "l": "区域",
+          "t": "string",
+          "d": "区县/商圈。"
+        },
+        {
+          "n": "salary_text",
+          "l": "薪资原文",
+          "t": "string",
+          "d": "保留原文，避免折算丢失口径。"
+        },
+        {
+          "n": "salary_min",
+          "l": "月薪下限",
+          "t": "integer",
+          "d": "折算到元/月；无法折算时留空。"
+        },
+        {
+          "n": "salary_max",
+          "l": "月薪上限",
+          "t": "integer",
+          "d": "折算到元/月；无法折算时留空。"
+        },
+        {
+          "n": "salary_months",
+          "l": "薪资月数",
+          "t": "integer",
+          "d": "如 13/14 薪；未知留空。"
+        },
+        {
+          "n": "experience",
+          "l": "经验要求",
+          "t": "string",
+          "d": "原文，如「3-5年」。"
+        },
+        {
+          "n": "degree",
+          "l": "学历要求",
+          "t": "string",
+          "d": "原文。"
+        },
+        {
+          "n": "tags",
+          "l": "标签",
+          "t": "json",
+          "d": "平台给出的技能/福利标签数组，原文。"
+        },
+        {
+          "n": "industry",
+          "l": "行业",
+          "t": "string",
+          "d": "公司行业。"
+        },
+        {
+          "n": "company_size",
+          "l": "公司规模",
+          "t": "string",
+          "d": "原文。"
+        },
+        {
+          "n": "company_type",
+          "l": "公司类型",
+          "t": "string",
+          "d": "原文。"
+        },
+        {
+          "n": "url",
+          "l": "原始链接",
+          "t": "string",
+          "d": "岗位链接，便于人工核对。"
+        },
+        {
+          "n": "published_at",
+          "l": "发布时间",
+          "t": "string",
+          "d": "原文（常只有月日），不伪造成精确时间。"
+        },
+        {
+          "n": "fetched_at",
+          "l": "采集时间",
+          "t": "datetime",
+          "req": true,
+          "d": "实际抓取时间（UTC）。"
+        },
+        {
+          "n": "keyword",
+          "l": "采集关键词",
+          "t": "string",
+          "idx": true,
+          "d": "触发该样本的检索词。"
+        },
+        {
+          "n": "matched_keywords",
+          "l": "命中关键词",
+          "t": "json",
+          "d": "同一条岗位被多个关键词命中时累计。"
+        },
+        {
+          "n": "role_family",
+          "l": "岗位族",
+          "t": "enum",
+          "e": "role_family",
+          "idx": true,
+          "d": "按关键词/标题推断，供分组。"
+        },
+        {
+          "n": "target_role_id",
+          "l": "目标岗位",
+          "t": "ref",
+          "ref": "target_role",
+          "idx": true,
+          "d": "归属的用户目标方向。"
+        }
+      ],
+      "rules": [
+        "同一平台内 `external_id` 唯一，重复采集时只更新不新增。",
+        "`salary_max` 不得小于 `salary_min`。"
+      ],
+      "notes": [
+        "列表级数据不含 JD 正文；正文需另采且平台有滑块验证，暂不做。",
+        "样本是公开岗位信息，不含候选人个人信息。"
+      ],
+      "full_fields": [
+        {
+          "n": "id",
+          "l": "主键",
+          "t": "uuid",
+          "req": true,
+          "d": "UUIDv7；客户端可离线生成，按时间有序"
+        },
+        {
+          "n": "platform",
+          "l": "平台",
+          "t": "enum",
+          "d": "数据来源平台。",
+          "e": "job_platform",
+          "req": true,
+          "idx": true
+        },
+        {
+          "n": "external_id",
+          "l": "平台内 ID",
+          "t": "string",
+          "d": "用于去重与回链。",
+          "req": true
+        },
+        {
+          "n": "title",
+          "l": "岗位标题",
+          "t": "string",
+          "d": "原文标题。",
+          "req": true,
+          "idx": true
+        },
+        {
+          "n": "company",
+          "l": "公司",
+          "t": "string",
+          "d": "原文公司名。"
+        },
+        {
+          "n": "city",
+          "l": "城市",
+          "t": "string",
+          "d": "工作城市。",
+          "idx": true
+        },
+        {
+          "n": "district",
+          "l": "区域",
+          "t": "string",
+          "d": "区县/商圈。"
+        },
+        {
+          "n": "salary_text",
+          "l": "薪资原文",
+          "t": "string",
+          "d": "保留原文，避免折算丢失口径。"
+        },
+        {
+          "n": "salary_min",
+          "l": "月薪下限",
+          "t": "integer",
+          "d": "折算到元/月；无法折算时留空。"
+        },
+        {
+          "n": "salary_max",
+          "l": "月薪上限",
+          "t": "integer",
+          "d": "折算到元/月；无法折算时留空。"
+        },
+        {
+          "n": "salary_months",
+          "l": "薪资月数",
+          "t": "integer",
+          "d": "如 13/14 薪；未知留空。"
+        },
+        {
+          "n": "experience",
+          "l": "经验要求",
+          "t": "string",
+          "d": "原文，如「3-5年」。"
+        },
+        {
+          "n": "degree",
+          "l": "学历要求",
+          "t": "string",
+          "d": "原文。"
+        },
+        {
+          "n": "tags",
+          "l": "标签",
+          "t": "json",
+          "d": "平台给出的技能/福利标签数组，原文。"
+        },
+        {
+          "n": "industry",
+          "l": "行业",
+          "t": "string",
+          "d": "公司行业。"
+        },
+        {
+          "n": "company_size",
+          "l": "公司规模",
+          "t": "string",
+          "d": "原文。"
+        },
+        {
+          "n": "company_type",
+          "l": "公司类型",
+          "t": "string",
+          "d": "原文。"
+        },
+        {
+          "n": "url",
+          "l": "原始链接",
+          "t": "string",
+          "d": "岗位链接，便于人工核对。"
+        },
+        {
+          "n": "published_at",
+          "l": "发布时间",
+          "t": "string",
+          "d": "原文（常只有月日），不伪造成精确时间。"
+        },
+        {
+          "n": "fetched_at",
+          "l": "采集时间",
+          "t": "datetime",
+          "d": "实际抓取时间（UTC）。",
+          "req": true
+        },
+        {
+          "n": "keyword",
+          "l": "采集关键词",
+          "t": "string",
+          "d": "触发该样本的检索词。",
+          "idx": true
+        },
+        {
+          "n": "matched_keywords",
+          "l": "命中关键词",
+          "t": "json",
+          "d": "同一条岗位被多个关键词命中时累计。"
+        },
+        {
+          "n": "role_family",
+          "l": "岗位族",
+          "t": "enum",
+          "d": "按关键词/标题推断，供分组。",
+          "e": "role_family",
+          "idx": true
+        },
+        {
+          "n": "target_role_id",
+          "l": "目标岗位",
+          "t": "ref",
+          "d": "归属的用户目标方向。",
+          "ref": "target_role",
+          "idx": true
+        },
+        {
+          "n": "created_at",
+          "l": "创建时间",
+          "t": "datetime",
+          "req": true,
+          "d": "记录首次写入时间（UTC）"
+        },
+        {
+          "n": "updated_at",
+          "l": "更新时间",
+          "t": "datetime",
+          "req": true,
+          "d": "最后一次正式变更时间，同步冲突判定依据"
+        },
+        {
+          "n": "revision",
+          "l": "版本号",
+          "t": "integer",
+          "req": true,
+          "def": "1",
+          "d": "每次正式变更 +1；材料与档案的版本回溯依据"
+        },
+        {
+          "n": "deleted_at",
+          "l": "删除时间",
+          "t": "datetime",
+          "d": "软删除标记；非空即视为已删除，历史保留在 audit_log"
+        }
+      ]
+    },
+    {
+      "id": "job_requirement",
+      "layer": "07_market",
+      "name": "岗位要求",
+      "priority": "P2",
+      "flags": [],
+      "purpose": "把岗位样本里的要求拆成可对照的能力项，用于「市场要什么 vs 我有什么」的差距分析。",
+      "fields": [
+        {
+          "n": "job_id",
+          "l": "岗位样本",
+          "t": "ref",
+          "ref": "job_posting",
+          "req": true,
+          "idx": true,
+          "d": "所属岗位。"
+        },
+        {
+          "n": "text",
+          "l": "要求原文",
+          "t": "string",
+          "req": true,
+          "d": "逐字摘录，不改写。"
+        },
+        {
+          "n": "requirement_type",
+          "l": "要求类型",
+          "t": "enum",
+          "e": "requirement_type",
+          "req": true,
+          "idx": true,
+          "d": "决定差距分析的归类。"
+        },
+        {
+          "n": "capability_id",
+          "l": "对应能力",
+          "t": "ref",
+          "ref": "capability",
+          "idx": true,
+          "d": "匹配到能力词典时填写；匹配不上留空。"
+        }
+      ],
+      "rules": [
+        "`text` 必须逐字来自岗位标题、标签或描述，不得改写。",
+        "匹配不到能力时留空，不强行归类。"
+      ],
+      "notes": [
+        "P2 阶段由 AI 生成建议、用户确认后入库。"
+      ],
+      "full_fields": [
+        {
+          "n": "id",
+          "l": "主键",
+          "t": "uuid",
+          "req": true,
+          "d": "UUIDv7；客户端可离线生成，按时间有序"
+        },
+        {
+          "n": "job_id",
+          "l": "岗位样本",
+          "t": "ref",
+          "d": "所属岗位。",
+          "ref": "job_posting",
+          "req": true,
+          "idx": true
+        },
+        {
+          "n": "text",
+          "l": "要求原文",
+          "t": "string",
+          "d": "逐字摘录，不改写。",
+          "req": true
+        },
+        {
+          "n": "requirement_type",
+          "l": "要求类型",
+          "t": "enum",
+          "d": "决定差距分析的归类。",
+          "e": "requirement_type",
+          "req": true,
+          "idx": true
+        },
+        {
+          "n": "capability_id",
+          "l": "对应能力",
+          "t": "ref",
+          "d": "匹配到能力词典时填写；匹配不上留空。",
+          "ref": "capability",
+          "idx": true
+        },
+        {
+          "n": "created_at",
+          "l": "创建时间",
+          "t": "datetime",
+          "req": true,
+          "d": "记录首次写入时间（UTC）"
+        },
+        {
+          "n": "updated_at",
+          "l": "更新时间",
+          "t": "datetime",
+          "req": true,
+          "d": "最后一次正式变更时间，同步冲突判定依据"
+        },
+        {
+          "n": "revision",
+          "l": "版本号",
+          "t": "integer",
+          "req": true,
+          "def": "1",
+          "d": "每次正式变更 +1；材料与档案的版本回溯依据"
+        },
+        {
+          "n": "deleted_at",
+          "l": "删除时间",
+          "t": "datetime",
+          "d": "软删除标记；非空即视为已删除，历史保留在 audit_log"
+        }
+      ]
+    },
+    {
+      "id": "salary_benchmark",
+      "layer": "07_market",
+      "name": "薪资基准",
+      "priority": "P2",
+      "flags": [],
+      "purpose": "来自报告或官方统计的分位薪资，用于与平台样本互相校验，避免只用单平台数据下结论。",
+      "fields": [
+        {
+          "n": "role_name",
+          "l": "岗位",
+          "t": "string",
+          "req": true,
+          "idx": true,
+          "d": "报告口径的岗位名。"
+        },
+        {
+          "n": "role_family",
+          "l": "岗位族",
+          "t": "enum",
+          "e": "role_family",
+          "idx": true,
+          "d": "便于跨报告聚合。"
+        },
+        {
+          "n": "city",
+          "l": "城市",
+          "t": "string",
+          "idx": true,
+          "d": "全国口径留空或写「全国」。"
+        },
+        {
+          "n": "level",
+          "l": "层级",
+          "t": "string",
+          "d": "如初级/中级/高级。"
+        },
+        {
+          "n": "p25",
+          "l": "P25 月薪",
+          "t": "integer",
+          "d": "元/月。"
+        },
+        {
+          "n": "p50",
+          "l": "P50 月薪",
+          "t": "integer",
+          "d": "元/月。"
+        },
+        {
+          "n": "p75",
+          "l": "P75 月薪",
+          "t": "integer",
+          "d": "元/月。"
+        },
+        {
+          "n": "currency",
+          "l": "币种",
+          "t": "string",
+          "d": "默认人民币。",
+          "def": "CNY"
+        },
+        {
+          "n": "period",
+          "l": "周期",
+          "t": "enum",
+          "e": "salary_period",
+          "req": true,
+          "d": "统一按周期比较。",
+          "def": "month"
+        },
+        {
+          "n": "source",
+          "l": "来源",
+          "t": "string",
+          "req": true,
+          "d": "报告/机构名。"
+        },
+        {
+          "n": "source_url",
+          "l": "来源链接",
+          "t": "string",
+          "d": "可核对。"
+        },
+        {
+          "n": "sample_size",
+          "l": "样本量",
+          "t": "integer",
+          "d": "报告披露时填写。"
+        },
+        {
+          "n": "as_of",
+          "l": "统计时点",
+          "t": "date",
+          "d": "报告所属季度/年份。"
+        },
+        {
+          "n": "note",
+          "l": "口径说明",
+          "t": "text",
+          "d": "如「含年终奖」「仅技术岗」。"
+        }
+      ],
+      "rules": [
+        "`p25`、`p50`、`p75` 同时存在时必须有序，否则校验失败。"
+      ],
+      "notes": [
+        "只摘录公开报告的汇总口径，不复制报告全文。"
+      ],
+      "full_fields": [
+        {
+          "n": "id",
+          "l": "主键",
+          "t": "uuid",
+          "req": true,
+          "d": "UUIDv7；客户端可离线生成，按时间有序"
+        },
+        {
+          "n": "role_name",
+          "l": "岗位",
+          "t": "string",
+          "d": "报告口径的岗位名。",
+          "req": true,
+          "idx": true
+        },
+        {
+          "n": "role_family",
+          "l": "岗位族",
+          "t": "enum",
+          "d": "便于跨报告聚合。",
+          "e": "role_family",
+          "idx": true
+        },
+        {
+          "n": "city",
+          "l": "城市",
+          "t": "string",
+          "d": "全国口径留空或写「全国」。",
+          "idx": true
+        },
+        {
+          "n": "level",
+          "l": "层级",
+          "t": "string",
+          "d": "如初级/中级/高级。"
+        },
+        {
+          "n": "p25",
+          "l": "P25 月薪",
+          "t": "integer",
+          "d": "元/月。"
+        },
+        {
+          "n": "p50",
+          "l": "P50 月薪",
+          "t": "integer",
+          "d": "元/月。"
+        },
+        {
+          "n": "p75",
+          "l": "P75 月薪",
+          "t": "integer",
+          "d": "元/月。"
+        },
+        {
+          "n": "currency",
+          "l": "币种",
+          "t": "string",
+          "d": "默认人民币。",
+          "def": "CNY"
+        },
+        {
+          "n": "period",
+          "l": "周期",
+          "t": "enum",
+          "d": "统一按周期比较。",
+          "e": "salary_period",
+          "req": true,
+          "def": "month"
+        },
+        {
+          "n": "source",
+          "l": "来源",
+          "t": "string",
+          "d": "报告/机构名。",
+          "req": true
+        },
+        {
+          "n": "source_url",
+          "l": "来源链接",
+          "t": "string",
+          "d": "可核对。"
+        },
+        {
+          "n": "sample_size",
+          "l": "样本量",
+          "t": "integer",
+          "d": "报告披露时填写。"
+        },
+        {
+          "n": "as_of",
+          "l": "统计时点",
+          "t": "date",
+          "d": "报告所属季度/年份。"
+        },
+        {
+          "n": "note",
+          "l": "口径说明",
+          "t": "text",
+          "d": "如「含年终奖」「仅技术岗」。"
+        },
+        {
+          "n": "created_at",
+          "l": "创建时间",
+          "t": "datetime",
+          "req": true,
+          "d": "记录首次写入时间（UTC）"
+        },
+        {
+          "n": "updated_at",
+          "l": "更新时间",
+          "t": "datetime",
+          "req": true,
+          "d": "最后一次正式变更时间，同步冲突判定依据"
+        },
+        {
+          "n": "revision",
+          "l": "版本号",
+          "t": "integer",
+          "req": true,
+          "def": "1",
+          "d": "每次正式变更 +1；材料与档案的版本回溯依据"
+        },
+        {
+          "n": "deleted_at",
+          "l": "删除时间",
+          "t": "datetime",
+          "d": "软删除标记；非空即视为已删除，历史保留在 audit_log"
+        }
+      ]
+    },
+    {
+      "id": "market_snapshot",
+      "layer": "07_market",
+      "name": "市场快照",
+      "priority": "P2",
+      "flags": [],
+      "purpose": "按周汇总的岗位数量、薪资分位与高频要求，用于趋势线与「这周市场在要什么」。",
+      "fields": [
+        {
+          "n": "week",
+          "l": "周",
+          "t": "string",
+          "req": true,
+          "idx": true,
+          "d": "ISO 周，如 2026W48。"
+        },
+        {
+          "n": "role_name",
+          "l": "岗位",
+          "t": "string",
+          "req": true,
+          "idx": true,
+          "d": "聚合口径的岗位名。"
+        },
+        {
+          "n": "city",
+          "l": "城市",
+          "t": "string",
+          "idx": true,
+          "d": "聚合城市。"
+        },
+        {
+          "n": "posting_count",
+          "l": "岗位数",
+          "t": "integer",
+          "d": "去重后的样本数。"
+        },
+        {
+          "n": "salary_p25",
+          "l": "P25 月薪",
+          "t": "integer",
+          "d": "由当月样本计算。"
+        },
+        {
+          "n": "salary_p50",
+          "l": "P50 月薪",
+          "t": "integer",
+          "d": "由当月样本计算。"
+        },
+        {
+          "n": "salary_p75",
+          "l": "P75 月薪",
+          "t": "integer",
+          "d": "由当月样本计算。"
+        },
+        {
+          "n": "top_tags",
+          "l": "高频标签",
+          "t": "json",
+          "d": "标签→出现次数。"
+        },
+        {
+          "n": "top_requirements",
+          "l": "高频要求",
+          "t": "json",
+          "d": "已匹配能力→次数；未匹配的另行统计。"
+        },
+        {
+          "n": "captured_at",
+          "l": "生成时间",
+          "t": "datetime",
+          "req": true,
+          "d": "快照生成时间。"
+        }
+      ],
+      "rules": [
+        "同一周 + 岗位 + 城市只保留一条快照，重算时覆盖。"
+      ],
+      "notes": [
+        "快照由样本计算，不引入外部估算；样本不足时标注样本量。"
+      ],
+      "full_fields": [
+        {
+          "n": "id",
+          "l": "主键",
+          "t": "uuid",
+          "req": true,
+          "d": "UUIDv7；客户端可离线生成，按时间有序"
+        },
+        {
+          "n": "week",
+          "l": "周",
+          "t": "string",
+          "d": "ISO 周，如 2026W48。",
+          "req": true,
+          "idx": true
+        },
+        {
+          "n": "role_name",
+          "l": "岗位",
+          "t": "string",
+          "d": "聚合口径的岗位名。",
+          "req": true,
+          "idx": true
+        },
+        {
+          "n": "city",
+          "l": "城市",
+          "t": "string",
+          "d": "聚合城市。",
+          "idx": true
+        },
+        {
+          "n": "posting_count",
+          "l": "岗位数",
+          "t": "integer",
+          "d": "去重后的样本数。"
+        },
+        {
+          "n": "salary_p25",
+          "l": "P25 月薪",
+          "t": "integer",
+          "d": "由当月样本计算。"
+        },
+        {
+          "n": "salary_p50",
+          "l": "P50 月薪",
+          "t": "integer",
+          "d": "由当月样本计算。"
+        },
+        {
+          "n": "salary_p75",
+          "l": "P75 月薪",
+          "t": "integer",
+          "d": "由当月样本计算。"
+        },
+        {
+          "n": "top_tags",
+          "l": "高频标签",
+          "t": "json",
+          "d": "标签→出现次数。"
+        },
+        {
+          "n": "top_requirements",
+          "l": "高频要求",
+          "t": "json",
+          "d": "已匹配能力→次数；未匹配的另行统计。"
+        },
+        {
+          "n": "captured_at",
+          "l": "生成时间",
+          "t": "datetime",
+          "d": "快照生成时间。",
+          "req": true
+        },
+        {
+          "n": "created_at",
+          "l": "创建时间",
+          "t": "datetime",
+          "req": true,
+          "d": "记录首次写入时间（UTC）"
+        },
+        {
+          "n": "updated_at",
+          "l": "更新时间",
+          "t": "datetime",
+          "req": true,
+          "d": "最后一次正式变更时间，同步冲突判定依据"
+        },
+        {
+          "n": "revision",
+          "l": "版本号",
+          "t": "integer",
+          "req": true,
+          "def": "1",
+          "d": "每次正式变更 +1；材料与档案的版本回溯依据"
+        },
+        {
+          "n": "deleted_at",
+          "l": "删除时间",
+          "t": "datetime",
+          "d": "软删除标记；非空即视为已删除，历史保留在 audit_log"
+        }
+      ]
     }
   ],
   "coverage": [
@@ -14874,10 +16167,10 @@
     }
   ],
   "stats": {
-    "entities": 45,
-    "enums": 53,
-    "fields": 936,
-    "relations": 68,
+    "entities": 50,
+    "enums": 57,
+    "fields": 1024,
+    "relations": 71,
     "coverage": 69
   }
 }

@@ -18,6 +18,7 @@ import sys
 import urllib.parse
 
 from .archive import Archive, ArchiveError
+from .market import ingest_cli as market_ingest_cli, summary as market_summary
 from .capability import (CapabilityMapper, capability_evidence, capability_rows,
                          infer_chain, seed_capabilities)
 from .backup import BackupError, create_backup, verify_backup_file
@@ -621,7 +622,9 @@ def _profile(args):
         patch = {}
         mapping = {"name": "display_name", "title": "current_title", "company": "current_company",
                    "industry": "industry", "summary": "summary", "target": "target_position",
-                   "city": "location_city", "start": "work_start_date"}
+                   "city": "location_city", "start": "work_start_date",
+                   "current_salary": "current_salary", "expected_salary": "expected_salary",
+                   "years": "years_of_experience"}
         for attr, field in mapping.items():
             value = getattr(args, attr)
             if value is not None:
@@ -716,6 +719,64 @@ def _capability(args):
             print("  作业 %s｜下一步：python -m app.cli ai proposals，确认后写入正式证据"
                   % result["job_id"])
         store.commit()
+    finally:
+        store.close()
+
+
+def _market(args):
+    store = Store(args.db)
+    try:
+        if args.action == "roles":
+            rows = store.list("target_role", limit=50, order_by="created_at")
+            if not rows:
+                print("还没有目标岗位：market role-add --name AI产品经理 --family product --city 杭州")
+                return
+            for row in rows:
+                kw = row.get("keywords") or []
+                if isinstance(kw, str):
+                    try:
+                        kw = json.loads(kw)
+                    except ValueError:
+                        kw = [kw]
+                print("%-12s %-10s %-6s %s" % (row["name"], row["role_family"], row.get("city") or "—",
+                                               ", ".join(kw) or "—"))
+            return
+        if args.action == "role-add":
+            if not args.name:
+                raise SystemExit("缺 --name")
+            if store.find_one("target_role", name=args.name):
+                raise SystemExit("已存在同名目标岗位：%s" % args.name)
+            keywords = [k.strip() for k in (args.keywords or args.name).split(",") if k.strip()]
+            rid = store.insert("target_role", {
+                "name": args.name,
+                "role_family": args.family or "product",
+                "city": args.city or "",
+                "keywords": keywords,
+                "is_active": True,
+                "origin": "user",
+            }, actor_type="user", remark="新增目标岗位")
+            store.commit()
+            print("✓ 新增目标岗位 %s（%s）" % (args.name, rid))
+            return
+        if args.action == "ingest":
+            stats = market_ingest_cli(store, args.path, target_role=args.role)
+            if args.snapshot:
+                data = market_summary(store, city=args.city)
+                print("  汇总：%d 条样本、%d 个分组" % (data["total_postings"], len(data["groups"])))
+            return stats
+        data = market_summary(store, city=args.city)
+        print("岗位样本：%d 条（城市：%s）" % (data["total_postings"], "、".join(data["cities"]) or "全部"))
+        if not data["groups"]:
+            print("还没有样本：先运行 collector（node collector/run.js），再 market ingest")
+            return
+        for g in data["groups"]:
+            salary = "—"
+            if g["salary_p50"]:
+                salary = "%d~%d（中位 %d）" % (g["salary_p25"], g["salary_p75"], g["salary_p50"])
+            print("\n%s / %s：%d 条" % (g["role_family"], g["keyword"], g["postings"]))
+            print("  月薪 P25~P75：%s（%d 条有薪资）" % (salary, g["salary_samples"]))
+            if g["top_tags"]:
+                print("  高频标签：%s" % "、".join("%s(%d)" % (t["tag"], t["count"]) for t in g["top_tags"][:8]))
     finally:
         store.close()
 
@@ -1426,6 +1487,9 @@ def build_parser():
     p.add_argument("--target", help="目标岗位")
     p.add_argument("--city", help="常驻城市")
     p.add_argument("--start", help="参加工作日期（YYYY-MM-DD）")
+    p.add_argument("--current-salary", type=int, help="当前月薪（元）")
+    p.add_argument("--expected-salary", type=int, help="期望月薪（元）")
+    p.add_argument("--years", type=int, help="工作年限（整年）")
     p.add_argument("--set", action="store_true", help="写入（不带则只查看）")
     p.set_defaults(func=_profile)
 
@@ -1439,6 +1503,17 @@ def build_parser():
     p.add_argument("--model", help="map：覆盖模型名")
     p.add_argument("--role", help="infer：覆盖岗位（默认读个人档案的当前职位）")
     p.set_defaults(func=_capability)
+
+    p = sub.add_parser("market", help="就业市场样本：采集结果入库与汇总")
+    p.add_argument("action", choices=["ingest", "summary", "roles", "role-add"])
+    p.add_argument("path", nargs="?", help="ingest：采集产出的 JSONL 文件")
+    p.add_argument("--role", help="ingest：归属的目标岗位名称")
+    p.add_argument("--city", help="summary：只看某个城市")
+    p.add_argument("--snapshot", action="store_true", help="ingest 后顺带打印汇总")
+    p.add_argument("--name", help="role-add：岗位名称")
+    p.add_argument("--family", help="role-add：岗位族（product/design/engineering/qa/operations/management/other）")
+    p.add_argument("--keywords", help="role-add：检索关键词，逗号分隔")
+    p.set_defaults(func=_market)
 
     p = sub.add_parser("link", help="把来源片段关联到任意档案记录")
     p.add_argument("entity")

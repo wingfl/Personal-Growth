@@ -10,13 +10,33 @@ CREATE TABLE user_profile (
   current_title TEXT,
   work_start_date TEXT,
   summary TEXT,
+  current_company TEXT,
+  industry TEXT,
+  location_city TEXT,
+  target_position TEXT,
+  years_of_experience INTEGER,
+  current_salary INTEGER,
+  expected_salary INTEGER,
   email TEXT,
   phone TEXT,
-  current_company TEXT,
   current_title_start_date TEXT,
-  target_position TEXT,
-  location_city TEXT,
-  industry TEXT,
+  origin TEXT NOT NULL CHECK (origin IN ('user', 'ai_agent', 'import', 'system')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  deleted_at TEXT
+);
+
+CREATE TABLE target_role (
+  id TEXT NOT NULL PRIMARY KEY,
+  name TEXT NOT NULL,
+  role_family TEXT NOT NULL DEFAULT 'product' CHECK (role_family IN ('product', 'design', 'engineering', 'qa', 'operations', 'management', 'other')),
+  city TEXT,
+  keywords TEXT,
+  level TEXT,
+  is_primary INTEGER DEFAULT 0 CHECK (is_primary IN (0, 1)),
+  is_active INTEGER DEFAULT 1 CHECK (is_active IN (0, 1)),
+  notes TEXT,
   origin TEXT NOT NULL CHECK (origin IN ('user', 'ai_agent', 'import', 'system')),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
@@ -26,7 +46,7 @@ CREATE TABLE user_profile (
 
 CREATE TABLE attachment (
   id TEXT NOT NULL PRIMARY KEY,
-  owner_type TEXT NOT NULL CHECK (owner_type IN ('user_profile', 'attachment', 'work_domain', 'dictionary', 'dict_item', 'tag', 'tag_link', 'provenance_link', 'entity_relation', 'audit_log', 'source_document', 'source_fragment', 'import_batch', 'project', 'business_system', 'function_module', 'work_item', 'work_theme', 'theme_member', 'role_record', 'achievement_case', 'achievement_metric', 'achievement_item_link', 'capability_evidence', 'evidence_evaluation', 'evaluation_dimension', 'evaluation_level', 'capability_category', 'capability', 'capability_alias', 'personal_trait', 'trait_evidence', 'self_assessment', 'growth_stage', 'growth_snapshot', 'growth_goal', 'material', 'material_citation', 'ai_job', 'change_proposal', 'proposal_evidence', 'prompt_template', 'agent_workflow', 'agent_credential', 'backup_record')),
+  owner_type TEXT NOT NULL CHECK (owner_type IN ('user_profile', 'target_role', 'attachment', 'work_domain', 'dictionary', 'dict_item', 'tag', 'tag_link', 'provenance_link', 'entity_relation', 'audit_log', 'source_document', 'source_fragment', 'import_batch', 'project', 'business_system', 'function_module', 'work_item', 'work_theme', 'theme_member', 'role_record', 'achievement_case', 'achievement_metric', 'achievement_item_link', 'capability_evidence', 'evidence_evaluation', 'evaluation_dimension', 'evaluation_level', 'capability_category', 'capability', 'capability_alias', 'personal_trait', 'trait_evidence', 'self_assessment', 'growth_stage', 'growth_snapshot', 'growth_goal', 'material', 'material_citation', 'ai_job', 'change_proposal', 'proposal_evidence', 'prompt_template', 'agent_workflow', 'agent_credential', 'backup_record', 'job_posting', 'job_requirement', 'salary_benchmark', 'market_snapshot')),
   owner_id TEXT NOT NULL,
   file_name TEXT NOT NULL,
   storage_path TEXT NOT NULL,
@@ -79,9 +99,9 @@ CREATE TABLE dictionary (
 
 CREATE TABLE entity_relation (
   id TEXT NOT NULL PRIMARY KEY,
-  from_type TEXT NOT NULL CHECK (from_type IN ('user_profile', 'attachment', 'work_domain', 'dictionary', 'dict_item', 'tag', 'tag_link', 'provenance_link', 'entity_relation', 'audit_log', 'source_document', 'source_fragment', 'import_batch', 'project', 'business_system', 'function_module', 'work_item', 'work_theme', 'theme_member', 'role_record', 'achievement_case', 'achievement_metric', 'achievement_item_link', 'capability_evidence', 'evidence_evaluation', 'evaluation_dimension', 'evaluation_level', 'capability_category', 'capability', 'capability_alias', 'personal_trait', 'trait_evidence', 'self_assessment', 'growth_stage', 'growth_snapshot', 'growth_goal', 'material', 'material_citation', 'ai_job', 'change_proposal', 'proposal_evidence', 'prompt_template', 'agent_workflow', 'agent_credential', 'backup_record')),
+  from_type TEXT NOT NULL CHECK (from_type IN ('user_profile', 'target_role', 'attachment', 'work_domain', 'dictionary', 'dict_item', 'tag', 'tag_link', 'provenance_link', 'entity_relation', 'audit_log', 'source_document', 'source_fragment', 'import_batch', 'project', 'business_system', 'function_module', 'work_item', 'work_theme', 'theme_member', 'role_record', 'achievement_case', 'achievement_metric', 'achievement_item_link', 'capability_evidence', 'evidence_evaluation', 'evaluation_dimension', 'evaluation_level', 'capability_category', 'capability', 'capability_alias', 'personal_trait', 'trait_evidence', 'self_assessment', 'growth_stage', 'growth_snapshot', 'growth_goal', 'material', 'material_citation', 'ai_job', 'change_proposal', 'proposal_evidence', 'prompt_template', 'agent_workflow', 'agent_credential', 'backup_record', 'job_posting', 'job_requirement', 'salary_benchmark', 'market_snapshot')),
   from_id TEXT NOT NULL,
-  to_type TEXT NOT NULL CHECK (to_type IN ('user_profile', 'attachment', 'work_domain', 'dictionary', 'dict_item', 'tag', 'tag_link', 'provenance_link', 'entity_relation', 'audit_log', 'source_document', 'source_fragment', 'import_batch', 'project', 'business_system', 'function_module', 'work_item', 'work_theme', 'theme_member', 'role_record', 'achievement_case', 'achievement_metric', 'achievement_item_link', 'capability_evidence', 'evidence_evaluation', 'evaluation_dimension', 'evaluation_level', 'capability_category', 'capability', 'capability_alias', 'personal_trait', 'trait_evidence', 'self_assessment', 'growth_stage', 'growth_snapshot', 'growth_goal', 'material', 'material_citation', 'ai_job', 'change_proposal', 'proposal_evidence', 'prompt_template', 'agent_workflow', 'agent_credential', 'backup_record')),
+  to_type TEXT NOT NULL CHECK (to_type IN ('user_profile', 'target_role', 'attachment', 'work_domain', 'dictionary', 'dict_item', 'tag', 'tag_link', 'provenance_link', 'entity_relation', 'audit_log', 'source_document', 'source_fragment', 'import_batch', 'project', 'business_system', 'function_module', 'work_item', 'work_theme', 'theme_member', 'role_record', 'achievement_case', 'achievement_metric', 'achievement_item_link', 'capability_evidence', 'evidence_evaluation', 'evaluation_dimension', 'evaluation_level', 'capability_category', 'capability', 'capability_alias', 'personal_trait', 'trait_evidence', 'self_assessment', 'growth_stage', 'growth_snapshot', 'growth_goal', 'material', 'material_citation', 'ai_job', 'change_proposal', 'proposal_evidence', 'prompt_template', 'agent_workflow', 'agent_credential', 'backup_record', 'job_posting', 'job_requirement', 'salary_benchmark', 'market_snapshot')),
   to_id TEXT NOT NULL,
   relation_type TEXT NOT NULL CHECK (relation_type IN ('contains', 'belongs_to', 'relates_to', 'derived_from', 'evidences', 'merged_into', 'split_from', 'duplicate_of', 'replaced_by')),
   strength REAL CHECK (strength BETWEEN 0 AND 1),
@@ -121,7 +141,7 @@ CREATE TABLE import_batch (
 
 CREATE TABLE role_record (
   id TEXT NOT NULL PRIMARY KEY,
-  target_type TEXT NOT NULL CHECK (target_type IN ('user_profile', 'attachment', 'work_domain', 'dictionary', 'dict_item', 'tag', 'tag_link', 'provenance_link', 'entity_relation', 'audit_log', 'source_document', 'source_fragment', 'import_batch', 'project', 'business_system', 'function_module', 'work_item', 'work_theme', 'theme_member', 'role_record', 'achievement_case', 'achievement_metric', 'achievement_item_link', 'capability_evidence', 'evidence_evaluation', 'evaluation_dimension', 'evaluation_level', 'capability_category', 'capability', 'capability_alias', 'personal_trait', 'trait_evidence', 'self_assessment', 'growth_stage', 'growth_snapshot', 'growth_goal', 'material', 'material_citation', 'ai_job', 'change_proposal', 'proposal_evidence', 'prompt_template', 'agent_workflow', 'agent_credential', 'backup_record')),
+  target_type TEXT NOT NULL CHECK (target_type IN ('user_profile', 'target_role', 'attachment', 'work_domain', 'dictionary', 'dict_item', 'tag', 'tag_link', 'provenance_link', 'entity_relation', 'audit_log', 'source_document', 'source_fragment', 'import_batch', 'project', 'business_system', 'function_module', 'work_item', 'work_theme', 'theme_member', 'role_record', 'achievement_case', 'achievement_metric', 'achievement_item_link', 'capability_evidence', 'evidence_evaluation', 'evaluation_dimension', 'evaluation_level', 'capability_category', 'capability', 'capability_alias', 'personal_trait', 'trait_evidence', 'self_assessment', 'growth_stage', 'growth_snapshot', 'growth_goal', 'material', 'material_citation', 'ai_job', 'change_proposal', 'proposal_evidence', 'prompt_template', 'agent_workflow', 'agent_credential', 'backup_record', 'job_posting', 'job_requirement', 'salary_benchmark', 'market_snapshot')),
   target_id TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('lead', 'owner', 'core', 'participant', 'support', 'observer')),
   responsibility_scope TEXT,
@@ -283,6 +303,46 @@ CREATE TABLE backup_record (
   restore_verification TEXT,
   is_encrypted INTEGER DEFAULT 0 CHECK (is_encrypted IN (0, 1)),
   encryption_note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  deleted_at TEXT
+);
+
+CREATE TABLE salary_benchmark (
+  id TEXT NOT NULL PRIMARY KEY,
+  role_name TEXT NOT NULL,
+  role_family TEXT CHECK (role_family IN ('product', 'design', 'engineering', 'qa', 'operations', 'management', 'other')),
+  city TEXT,
+  level TEXT,
+  p25 INTEGER,
+  p50 INTEGER,
+  p75 INTEGER,
+  currency TEXT DEFAULT 'CNY',
+  period TEXT NOT NULL DEFAULT 'month' CHECK (period IN ('month', 'year', 'day', 'hour')),
+  source TEXT NOT NULL,
+  source_url TEXT,
+  sample_size INTEGER,
+  as_of TEXT,
+  note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  deleted_at TEXT
+);
+
+CREATE TABLE market_snapshot (
+  id TEXT NOT NULL PRIMARY KEY,
+  week TEXT NOT NULL,
+  role_name TEXT NOT NULL,
+  city TEXT,
+  posting_count INTEGER,
+  salary_p25 INTEGER,
+  salary_p50 INTEGER,
+  salary_p75 INTEGER,
+  top_tags TEXT,
+  top_requirements TEXT,
+  captured_at TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   revision INTEGER NOT NULL DEFAULT 1,
@@ -474,6 +534,37 @@ CREATE TABLE agent_workflow (
   applies_to_scopes TEXT,
   parent_workflow_id TEXT REFERENCES agent_workflow(id),
   default_prompt_template_id TEXT REFERENCES prompt_template(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  deleted_at TEXT
+);
+
+CREATE TABLE job_posting (
+  id TEXT NOT NULL PRIMARY KEY,
+  platform TEXT NOT NULL CHECK (platform IN ('51job', 'boss', 'liepin', 'zhaopin', 'lagou', 'other')),
+  external_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  company TEXT,
+  city TEXT,
+  district TEXT,
+  salary_text TEXT,
+  salary_min INTEGER,
+  salary_max INTEGER,
+  salary_months INTEGER,
+  experience TEXT,
+  degree TEXT,
+  tags TEXT,
+  industry TEXT,
+  company_size TEXT,
+  company_type TEXT,
+  url TEXT,
+  published_at TEXT,
+  fetched_at TEXT NOT NULL,
+  keyword TEXT,
+  matched_keywords TEXT,
+  role_family TEXT CHECK (role_family IN ('product', 'design', 'engineering', 'qa', 'operations', 'management', 'other')),
+  target_role_id TEXT REFERENCES target_role(id),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   revision INTEGER NOT NULL DEFAULT 1,
@@ -697,10 +788,22 @@ CREATE TABLE ai_job (
   deleted_at TEXT
 );
 
+CREATE TABLE job_requirement (
+  id TEXT NOT NULL PRIMARY KEY,
+  job_id TEXT NOT NULL REFERENCES job_posting(id),
+  text TEXT NOT NULL,
+  requirement_type TEXT NOT NULL CHECK (requirement_type IN ('skill', 'experience', 'education', 'domain', 'tool', 'soft', 'responsibility', 'other')),
+  capability_id TEXT REFERENCES capability(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  deleted_at TEXT
+);
+
 CREATE TABLE tag_link (
   id TEXT NOT NULL PRIMARY KEY,
   tag_id TEXT NOT NULL REFERENCES tag(id),
-  entity_type TEXT NOT NULL CHECK (entity_type IN ('user_profile', 'attachment', 'work_domain', 'dictionary', 'dict_item', 'tag', 'tag_link', 'provenance_link', 'entity_relation', 'audit_log', 'source_document', 'source_fragment', 'import_batch', 'project', 'business_system', 'function_module', 'work_item', 'work_theme', 'theme_member', 'role_record', 'achievement_case', 'achievement_metric', 'achievement_item_link', 'capability_evidence', 'evidence_evaluation', 'evaluation_dimension', 'evaluation_level', 'capability_category', 'capability', 'capability_alias', 'personal_trait', 'trait_evidence', 'self_assessment', 'growth_stage', 'growth_snapshot', 'growth_goal', 'material', 'material_citation', 'ai_job', 'change_proposal', 'proposal_evidence', 'prompt_template', 'agent_workflow', 'agent_credential', 'backup_record')),
+  entity_type TEXT NOT NULL CHECK (entity_type IN ('user_profile', 'target_role', 'attachment', 'work_domain', 'dictionary', 'dict_item', 'tag', 'tag_link', 'provenance_link', 'entity_relation', 'audit_log', 'source_document', 'source_fragment', 'import_batch', 'project', 'business_system', 'function_module', 'work_item', 'work_theme', 'theme_member', 'role_record', 'achievement_case', 'achievement_metric', 'achievement_item_link', 'capability_evidence', 'evidence_evaluation', 'evaluation_dimension', 'evaluation_level', 'capability_category', 'capability', 'capability_alias', 'personal_trait', 'trait_evidence', 'self_assessment', 'growth_stage', 'growth_snapshot', 'growth_goal', 'material', 'material_citation', 'ai_job', 'change_proposal', 'proposal_evidence', 'prompt_template', 'agent_workflow', 'agent_credential', 'backup_record', 'job_posting', 'job_requirement', 'salary_benchmark', 'market_snapshot')),
   entity_id TEXT NOT NULL,
   link_source TEXT DEFAULT 'user' CHECK (link_source IN ('user', 'ai_agent', 'import', 'system')),
   is_primary INTEGER DEFAULT 0 CHECK (is_primary IN (0, 1)),
@@ -717,7 +820,7 @@ CREATE TABLE tag_link (
 
 CREATE TABLE provenance_link (
   id TEXT NOT NULL PRIMARY KEY,
-  entity_type TEXT NOT NULL CHECK (entity_type IN ('user_profile', 'attachment', 'work_domain', 'dictionary', 'dict_item', 'tag', 'tag_link', 'provenance_link', 'entity_relation', 'audit_log', 'source_document', 'source_fragment', 'import_batch', 'project', 'business_system', 'function_module', 'work_item', 'work_theme', 'theme_member', 'role_record', 'achievement_case', 'achievement_metric', 'achievement_item_link', 'capability_evidence', 'evidence_evaluation', 'evaluation_dimension', 'evaluation_level', 'capability_category', 'capability', 'capability_alias', 'personal_trait', 'trait_evidence', 'self_assessment', 'growth_stage', 'growth_snapshot', 'growth_goal', 'material', 'material_citation', 'ai_job', 'change_proposal', 'proposal_evidence', 'prompt_template', 'agent_workflow', 'agent_credential', 'backup_record')),
+  entity_type TEXT NOT NULL CHECK (entity_type IN ('user_profile', 'target_role', 'attachment', 'work_domain', 'dictionary', 'dict_item', 'tag', 'tag_link', 'provenance_link', 'entity_relation', 'audit_log', 'source_document', 'source_fragment', 'import_batch', 'project', 'business_system', 'function_module', 'work_item', 'work_theme', 'theme_member', 'role_record', 'achievement_case', 'achievement_metric', 'achievement_item_link', 'capability_evidence', 'evidence_evaluation', 'evaluation_dimension', 'evaluation_level', 'capability_category', 'capability', 'capability_alias', 'personal_trait', 'trait_evidence', 'self_assessment', 'growth_stage', 'growth_snapshot', 'growth_goal', 'material', 'material_citation', 'ai_job', 'change_proposal', 'proposal_evidence', 'prompt_template', 'agent_workflow', 'agent_credential', 'backup_record', 'job_posting', 'job_requirement', 'salary_benchmark', 'market_snapshot')),
   entity_id TEXT NOT NULL,
   field_name TEXT,
   fragment_id TEXT NOT NULL REFERENCES source_fragment(id),
@@ -948,7 +1051,7 @@ CREATE TABLE change_proposal (
   job_id TEXT REFERENCES ai_job(id),
   batch_id TEXT,
   change_type TEXT NOT NULL CHECK (change_type IN ('create', 'update', 'merge', 'split', 'delete', 'link', 'unlink')),
-  target_entity_type TEXT NOT NULL CHECK (target_entity_type IN ('user_profile', 'attachment', 'work_domain', 'dictionary', 'dict_item', 'tag', 'tag_link', 'provenance_link', 'entity_relation', 'audit_log', 'source_document', 'source_fragment', 'import_batch', 'project', 'business_system', 'function_module', 'work_item', 'work_theme', 'theme_member', 'role_record', 'achievement_case', 'achievement_metric', 'achievement_item_link', 'capability_evidence', 'evidence_evaluation', 'evaluation_dimension', 'evaluation_level', 'capability_category', 'capability', 'capability_alias', 'personal_trait', 'trait_evidence', 'self_assessment', 'growth_stage', 'growth_snapshot', 'growth_goal', 'material', 'material_citation', 'ai_job', 'change_proposal', 'proposal_evidence', 'prompt_template', 'agent_workflow', 'agent_credential', 'backup_record')),
+  target_entity_type TEXT NOT NULL CHECK (target_entity_type IN ('user_profile', 'target_role', 'attachment', 'work_domain', 'dictionary', 'dict_item', 'tag', 'tag_link', 'provenance_link', 'entity_relation', 'audit_log', 'source_document', 'source_fragment', 'import_batch', 'project', 'business_system', 'function_module', 'work_item', 'work_theme', 'theme_member', 'role_record', 'achievement_case', 'achievement_metric', 'achievement_item_link', 'capability_evidence', 'evidence_evaluation', 'evaluation_dimension', 'evaluation_level', 'capability_category', 'capability', 'capability_alias', 'personal_trait', 'trait_evidence', 'self_assessment', 'growth_stage', 'growth_snapshot', 'growth_goal', 'material', 'material_citation', 'ai_job', 'change_proposal', 'proposal_evidence', 'prompt_template', 'agent_workflow', 'agent_credential', 'backup_record', 'job_posting', 'job_requirement', 'salary_benchmark', 'market_snapshot')),
   target_entity_id TEXT,
   proposed_payload TEXT NOT NULL,
   base_payload TEXT,
@@ -972,7 +1075,7 @@ CREATE TABLE change_proposal (
 
 CREATE TABLE audit_log (
   id TEXT NOT NULL PRIMARY KEY,
-  entity_type TEXT NOT NULL CHECK (entity_type IN ('user_profile', 'attachment', 'work_domain', 'dictionary', 'dict_item', 'tag', 'tag_link', 'provenance_link', 'entity_relation', 'audit_log', 'source_document', 'source_fragment', 'import_batch', 'project', 'business_system', 'function_module', 'work_item', 'work_theme', 'theme_member', 'role_record', 'achievement_case', 'achievement_metric', 'achievement_item_link', 'capability_evidence', 'evidence_evaluation', 'evaluation_dimension', 'evaluation_level', 'capability_category', 'capability', 'capability_alias', 'personal_trait', 'trait_evidence', 'self_assessment', 'growth_stage', 'growth_snapshot', 'growth_goal', 'material', 'material_citation', 'ai_job', 'change_proposal', 'proposal_evidence', 'prompt_template', 'agent_workflow', 'agent_credential', 'backup_record')),
+  entity_type TEXT NOT NULL CHECK (entity_type IN ('user_profile', 'target_role', 'attachment', 'work_domain', 'dictionary', 'dict_item', 'tag', 'tag_link', 'provenance_link', 'entity_relation', 'audit_log', 'source_document', 'source_fragment', 'import_batch', 'project', 'business_system', 'function_module', 'work_item', 'work_theme', 'theme_member', 'role_record', 'achievement_case', 'achievement_metric', 'achievement_item_link', 'capability_evidence', 'evidence_evaluation', 'evaluation_dimension', 'evaluation_level', 'capability_category', 'capability', 'capability_alias', 'personal_trait', 'trait_evidence', 'self_assessment', 'growth_stage', 'growth_snapshot', 'growth_goal', 'material', 'material_citation', 'ai_job', 'change_proposal', 'proposal_evidence', 'prompt_template', 'agent_workflow', 'agent_credential', 'backup_record', 'job_posting', 'job_requirement', 'salary_benchmark', 'market_snapshot')),
   entity_id TEXT NOT NULL,
   action TEXT NOT NULL CHECK (action IN ('create', 'update', 'merge', 'split', 'delete', 'confirm', 'reject', 'export', 'import', 'restore')),
   before_payload TEXT,
@@ -1044,7 +1147,7 @@ CREATE TABLE material_citation (
   material_id TEXT NOT NULL REFERENCES material(id),
   section_key TEXT NOT NULL DEFAULT 'body',
   snippet TEXT,
-  cited_entity_type TEXT NOT NULL CHECK (cited_entity_type IN ('user_profile', 'attachment', 'work_domain', 'dictionary', 'dict_item', 'tag', 'tag_link', 'provenance_link', 'entity_relation', 'audit_log', 'source_document', 'source_fragment', 'import_batch', 'project', 'business_system', 'function_module', 'work_item', 'work_theme', 'theme_member', 'role_record', 'achievement_case', 'achievement_metric', 'achievement_item_link', 'capability_evidence', 'evidence_evaluation', 'evaluation_dimension', 'evaluation_level', 'capability_category', 'capability', 'capability_alias', 'personal_trait', 'trait_evidence', 'self_assessment', 'growth_stage', 'growth_snapshot', 'growth_goal', 'material', 'material_citation', 'ai_job', 'change_proposal', 'proposal_evidence', 'prompt_template', 'agent_workflow', 'agent_credential', 'backup_record')),
+  cited_entity_type TEXT NOT NULL CHECK (cited_entity_type IN ('user_profile', 'target_role', 'attachment', 'work_domain', 'dictionary', 'dict_item', 'tag', 'tag_link', 'provenance_link', 'entity_relation', 'audit_log', 'source_document', 'source_fragment', 'import_batch', 'project', 'business_system', 'function_module', 'work_item', 'work_theme', 'theme_member', 'role_record', 'achievement_case', 'achievement_metric', 'achievement_item_link', 'capability_evidence', 'evidence_evaluation', 'evaluation_dimension', 'evaluation_level', 'capability_category', 'capability', 'capability_alias', 'personal_trait', 'trait_evidence', 'self_assessment', 'growth_stage', 'growth_snapshot', 'growth_goal', 'material', 'material_citation', 'ai_job', 'change_proposal', 'proposal_evidence', 'prompt_template', 'agent_workflow', 'agent_credential', 'backup_record', 'job_posting', 'job_requirement', 'salary_benchmark', 'market_snapshot')),
   cited_entity_id TEXT NOT NULL,
   fragment_id TEXT REFERENCES source_fragment(id),
   citation_type TEXT NOT NULL CHECK (citation_type IN ('work_experience', 'capability', 'achievement', 'metric', 'trait', 'basic_info')),
@@ -1077,6 +1180,7 @@ CREATE TABLE proposal_evidence (
 
 -- 唯一索引：加 WHERE deleted_at IS NULL，使软删除后可以重建同名记录；
 -- 组合键中含非必填列时额外加 WHERE 列 IS NOT NULL，避免 NULL 让唯一性失效。
+CREATE UNIQUE INDEX uq_target_role_name ON target_role(name) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX uq_work_domain_name ON work_domain(name) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX uq_work_domain_code ON work_domain(code) WHERE deleted_at IS NULL AND code IS NOT NULL;
 CREATE UNIQUE INDEX uq_dictionary_code ON dictionary(code) WHERE deleted_at IS NULL;
@@ -1096,7 +1200,12 @@ CREATE UNIQUE INDEX uq_material_citation_material_id_section_key_cited_entity_ty
 CREATE UNIQUE INDEX uq_agent_credential_token_hash ON agent_credential(token_hash) WHERE deleted_at IS NULL;
 
 -- 普通索引
+CREATE INDEX idx_user_profile_location_city ON user_profile(location_city);
 CREATE INDEX idx_user_profile_email ON user_profile(email);
+CREATE INDEX idx_target_role_name ON target_role(name);
+CREATE INDEX idx_target_role_role_family ON target_role(role_family);
+CREATE INDEX idx_target_role_city ON target_role(city);
+CREATE INDEX idx_target_role_is_active ON target_role(is_active);
 CREATE INDEX idx_attachment_owner_type ON attachment(owner_type);
 CREATE INDEX idx_attachment_owner_id ON attachment(owner_id);
 CREATE INDEX idx_attachment_content_hash ON attachment(content_hash);
@@ -1227,6 +1336,21 @@ CREATE INDEX idx_proposal_evidence_fragment_id ON proposal_evidence(fragment_id)
 CREATE INDEX idx_prompt_template_job_type ON prompt_template(job_type);
 CREATE INDEX idx_agent_workflow_job_type ON agent_workflow(job_type);
 CREATE INDEX idx_backup_record_operation_type ON backup_record(operation_type);
+CREATE INDEX idx_job_posting_platform ON job_posting(platform);
+CREATE INDEX idx_job_posting_title ON job_posting(title);
+CREATE INDEX idx_job_posting_city ON job_posting(city);
+CREATE INDEX idx_job_posting_keyword ON job_posting(keyword);
+CREATE INDEX idx_job_posting_role_family ON job_posting(role_family);
+CREATE INDEX idx_job_posting_target_role_id ON job_posting(target_role_id);
+CREATE INDEX idx_job_requirement_job_id ON job_requirement(job_id);
+CREATE INDEX idx_job_requirement_requirement_type ON job_requirement(requirement_type);
+CREATE INDEX idx_job_requirement_capability_id ON job_requirement(capability_id);
+CREATE INDEX idx_salary_benchmark_role_name ON salary_benchmark(role_name);
+CREATE INDEX idx_salary_benchmark_role_family ON salary_benchmark(role_family);
+CREATE INDEX idx_salary_benchmark_city ON salary_benchmark(city);
+CREATE INDEX idx_market_snapshot_week ON market_snapshot(week);
+CREATE INDEX idx_market_snapshot_role_name ON market_snapshot(role_name);
+CREATE INDEX idx_market_snapshot_city ON market_snapshot(city);
 
 -- 多态引用复合索引（entity_type + entity_id 成对查询）
 CREATE INDEX idx_attachment_owner_type_owner_id ON attachment(owner_type, owner_id);

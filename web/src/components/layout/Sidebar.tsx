@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   ChartNoAxesCombined,
+  LineChart,
   Radar,
   FolderOpen,
   History,
@@ -18,6 +19,7 @@ const NAV = [
   { to: "/archive", label: "成长档案", icon: FolderOpen },
   { to: "/insights", label: "数据分析", icon: ChartNoAxesCombined },
   { to: "/capabilities", label: "能力画像", icon: Radar },
+  { to: "/market", label: "市场定位", icon: LineChart },
   { to: "/goals", label: "成长目标", icon: Target },
   { to: "/review", label: "复盘", icon: History },
   { to: "/settings", label: "设置", icon: Settings },
@@ -28,6 +30,7 @@ export const TITLES: Record<string, string> = {
   "/archive": "成长档案",
   "/insights": "数据分析",
   "/capabilities": "能力画像",
+  "/market": "市场定位",
   "/goals": "成长目标",
   "/review": "复盘",
   "/settings": "设置",

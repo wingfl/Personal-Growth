@@ -104,7 +104,7 @@ class BackupCase(unittest.TestCase):
     def test_verify_database_reports_tables_and_rows(self):
         report = verify_database(self.db)
         self.assertTrue(report["ok"], report["problems"])
-        self.assertEqual(report["tables"], 45)
+        self.assertEqual(report["tables"], 50)
         self.assertGreater(report["rows"], 0)
 
     def test_verify_backup_file_returns_checksum_and_size(self):

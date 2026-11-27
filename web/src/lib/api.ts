@@ -191,3 +191,31 @@ export type CapabilitiesPayload = {
   categories: { name: string; capabilities: Capability[] }[];
   items: Capability[];
 };
+
+export type MarketTag = { tag: string; count: number };
+
+export type MarketGroup = {
+  role_family: string;
+  keyword: string;
+  postings: number;
+  salary_samples: number;
+  salary_p25: number | null;
+  salary_p50: number | null;
+  salary_p75: number | null;
+  top_tags: MarketTag[];
+  companies: string[];
+  vs_current_pct?: number | null;
+};
+
+export type MarketPayload = {
+  generated_at: string;
+  role: string;
+  city: string;
+  cities: string[];
+  total_postings: number;
+  current_salary: number | null;
+  expected_salary: number | null;
+  groups: MarketGroup[];
+  chain: string | null;
+  caveat: string;
+};

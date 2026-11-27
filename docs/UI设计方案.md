@@ -29,7 +29,7 @@
 | --- | --- |
 | 形态 | 单机 CLI，`python -m app.cli <命令>`，SQLite 单文件库 |
 | 产品代码 | `app/` 12 个模块，**零第三方依赖**（`tools/check_all.py` 第 5 步强制） |
-| 数据 | 45 实体 / 936 字段 / 53 枚举；`schema/schema.sql` 45 表 202 索引 |
+| 数据 | 50 实体 / 1024 字段 / 57 枚举；`schema/schema.sql` 50 表 228 索引 |
 | 数据量（2026-11-27） | 资料 37 篇、片段 2559、事项约 300、项目 30、系统 3、来源关联 100+ |
 | 分析类数据 | `growth_snapshot`、`growth_stage`、`capability*`、`personal_trait`、`achievement_case` 均为 **0** |
 | 前端 | **不存在**：无 `*.html`、无 `*.css`、无 `package.json`、无构建脚本 |
@@ -137,6 +137,7 @@
 ├─ 首页            /                 成长状态一屏看懂
 ├─ 成长档案        /archive?tab=…     项目 / 系统 / 模块 / 事项 / 主题
 ├─ 数据分析        /insights          趋势、构成、热力图、阶段对比（数据不足时给空态）
+├─ 市场定位        /market            岗位样本的薪资分位与差距（需先采集并入库）
 ├─ 能力画像        /capabilities      能力词典、证据、按月变化
 ├─ 目标管理        /goals             项目目标 + 本周承诺 + 逾期
 ├─ 复盘            /review            周报月报、待审建议
@@ -304,6 +305,7 @@ web/
 | `GET /api/insights/mix` | 按类型 / 领域的构成 |
 | `GET /api/insights/heatmap?weeks=` | 周 × 星期矩阵 |
 | `GET /api/goals` | 已持久化的 `growth_goal` + 由真实数据算出的建议 |
+| `GET /api/market` | 岗位样本、薪资分位、与当前薪资差距 |
 | `GET /api/profile` | 身份与角色（`user_profile.current_title` 等） |
 | `GET /api/capabilities` | 能力词典、覆盖/证据/强度汇总、按分类聚合、近 8 个月变化 |
 | `GET /api/capabilities/{id}` | 单个能力的证据明细 |
@@ -357,6 +359,7 @@ web/
 | 首页 | 4 张统计卡（含 12 周迷你线）、12 周趋势 + 环比结论、需要处理、最近记录、项目组合 | `/api/summary` |
 | 成长档案 | 事项 / 项目 / 资料三 Tab；搜索、类型与项目筛选、分页；项目详情侧栏 | `/api/items`、`/api/projects` |
 | 数据分析 | 12/26/52 周切换；趋势（柱 + 4 周均线）、工作构成、活跃热力图；阶段对比为「数据未建立」空态 | `/api/insights/*` |
+| 市场定位 | 岗位样本数、各方向薪资 P25–P75 与中位、我的月薪标记、高频标签；无样本时给采集命令 | `/api/market` |
 | 能力画像 | 覆盖/证据/平均强度三张统计卡、雷达、分类能力卡（五点强度 + 最近原文）；空态给标注命令 | `/api/capabilities`、`/api/capabilities/{id}` |
 | 成长目标 | 真实目标卡（状态/类型/达成标准/剩余天数/进度条）+ 系统建议 + 目标与建议区别说明 | `/api/goals` |
 | 复盘 | 待处理建议、资料提取状态、CLI 命令说明 | `/api/proposals`、`/api/documents` |
