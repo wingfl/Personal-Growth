@@ -57,7 +57,10 @@ def has_fabricated_numbers(text):
 
 def clean_intro(text, name=""):
     text = _META.sub("", text or "")
-    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+", " ", text)
+    # 中文句子之间的空格是模型输出噪声，压缩掉
+    text = re.sub(r"(?<=[。！？；，、])\s+", "", text)
+    text = text.strip()
     if name and text.startswith("这个项目是%s" % name):
         text = text[len("这个项目是%s" % name):].lstrip("，。 ")
     return text.strip()
