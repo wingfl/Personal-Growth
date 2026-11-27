@@ -363,6 +363,9 @@ class Api:
         total = sum(row["evidence_count"] for row in rows)
         covered = len([row for row in rows if row["evidence_count"]])
         strength = [row["avg_strength"] for row in rows if row["avg_strength"]]
+        fact_total = sum(row.get("fact_count") or 0 for row in rows)
+        inferred_total = sum(row.get("inferred_count") or 0 for row in rows)
+        fact_strength = [row["fact_avg_strength"] for row in rows if row["fact_avg_strength"]]
         return {
             "generated_at": now_iso(),
             "framework": FRAMEWORK,
@@ -371,7 +374,11 @@ class Api:
                 "capability_count": len(rows),
                 "covered": covered,
                 "evidence_total": total,
+                "fact_total": fact_total,
+                "inferred_total": inferred_total,
                 "avg_strength": round(sum(strength) / len(strength), 2) if strength else None,
+                "fact_avg_strength": (round(sum(fact_strength) / len(fact_strength), 2)
+                                      if fact_strength else None),
             },
             "categories": [{"name": name, "capabilities": items}
                            for name, items in groups.items()],

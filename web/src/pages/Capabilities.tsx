@@ -26,9 +26,26 @@ function StrengthDots({ value }: { value: number | null }) {
   );
 }
 
-function radarOption(items: Capability[]) {
+function radarOption(items: Capability[], withInferred: boolean) {
+  const fact = {
+    value: items.map((item) => (item.fact_count ? item.fact_avg_strength : null)),
+    name: "原文证据",
+    itemStyle: { color: "#4f46e5" },
+    areaStyle: { color: "rgba(79,70,229,.16)" },
+    lineStyle: { color: "#4f46e5", width: 2 },
+  };
+  const all = {
+    value: items.map((item) => (item.evidence_count ? item.avg_strength : null)),
+    name: "含岗位链路推断",
+    itemStyle: { color: "#d97706" },
+    areaStyle: { color: "rgba(217,119,6,.10)" },
+    lineStyle: { color: "#d97706", width: 2, type: "dashed" },
+  };
   return {
     tooltip: { trigger: "item" },
+    legend: withInferred
+      ? { bottom: 0, itemWidth: 12, itemHeight: 8, textStyle: { color: "#71717a", fontSize: 13 } }
+      : undefined,
     radar: {
       radius: "68%",
       indicator: items.map((item) => ({ name: item.name, max: 5 })),
@@ -41,15 +58,7 @@ function radarOption(items: Capability[]) {
       {
         type: "radar",
         symbolSize: 6,
-        data: [
-          {
-            value: items.map((item) => (item.evidence_count ? item.avg_strength : null)),
-            name: "平均证据强度",
-            itemStyle: { color: "#4f46e5" },
-            areaStyle: { color: "rgba(79,70,229,.18)" },
-            lineStyle: { color: "#4f46e5", width: 2 },
-          },
-        ],
+        data: withInferred ? [fact, all] : [fact],
       },
     ],
   };
@@ -95,12 +104,18 @@ export function Capabilities() {
         <Card className="p-6">
           <div className="text-sm font-medium text-muted-foreground">已确认证据</div>
           <div className="num mt-1 text-3xl font-semibold">{summary.evidence_total}</div>
+          <div className="mt-2 text-sm text-muted-foreground">
+            原文 {summary.fact_total} · 链路推断 {summary.inferred_total}
+          </div>
         </Card>
         <Card className="p-6">
           <div className="text-sm font-medium text-muted-foreground">平均证据强度</div>
           <div className="num mt-1 text-3xl font-semibold">
-            {summary.avg_strength ? summary.avg_strength.toFixed(1) : "—"}
+            {(summary.fact_avg_strength ?? summary.avg_strength)?.toFixed(1) ?? "—"}
             <span className="ml-1 text-lg font-normal text-muted-foreground">/ 5</span>
+          </div>
+          <div className="mt-2 text-sm text-muted-foreground">
+            含推断后 {summary.avg_strength ? summary.avg_strength.toFixed(1) : "—"}
           </div>
         </Card>
       </div>
@@ -121,12 +136,12 @@ export function Capabilities() {
                 <div>
                   <CardTitle>能力维度</CardTitle>
                   <CardDescription>
-                    半径是该能力的平均证据强度（1–5）；空值表示还没有证据
+                    实线是原文证据的强度；虚线是按岗位链路补出的推断（1–5），空值表示还没有证据
                   </CardDescription>
                 </div>
               </CardHeader>
               <CardContent className="pt-0">
-                <EChart option={radarOption(items)} height={360} />
+                <EChart option={radarOption(items, summary.inferred_total > 0)} height={360} />
               </CardContent>
             </Card>
 
@@ -141,6 +156,7 @@ export function Capabilities() {
                 <p>1. 周报、月报先入库并提取成事项，人工确认。</p>
                 <p>2. 标注作业把事项映射到能力词典，产出证据建议；每条都带原文引用。</p>
                 <p>3. 确认后的证据才计入画像，AI 不会直接改写能力评价。</p>
+                <p>4. 只写「完成评审并推进」这类里程碑时，系统会按你的岗位链路补出调研、PRD、方案、验收等隐含环节，标记为推断，和原文证据分开显示。</p>
                 <p className="pt-1 text-foreground/80">{data.level_scale}</p>
               </CardContent>
             </Card>
@@ -158,9 +174,14 @@ export function Capabilities() {
                           <div className="text-lg font-semibold">{item.name}</div>
                           <div className="mt-1 text-sm text-muted-foreground">{item.definition}</div>
                         </div>
-                        <Badge variant={item.evidence_count ? "info" : "muted"}>
-                          {item.evidence_count ? `${item.evidence_count} 条` : "待积累"}
-                        </Badge>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Badge variant={item.evidence_count ? "info" : "muted"}>
+                            {item.evidence_count ? `${item.evidence_count} 条` : "待积累"}
+                          </Badge>
+                          {item.inferred_count > 0 && (
+                            <Badge variant="muted">推断 {item.inferred_count}</Badge>
+                          )}
+                        </div>
                       </div>
                       <div className="mt-4 flex items-center justify-between gap-3">
                         <StrengthDots value={item.avg_strength} />
@@ -174,11 +195,13 @@ export function Capabilities() {
                             <Quote className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
                             <span>{item.recent[0].statement}</span>
                           </div>
-                          {item.recent[0].strength_basis && (
-                            <div className="mt-1 truncate pl-5 text-xs text-muted-foreground">
-                              原文：{item.recent[0].strength_basis}
-                            </div>
-                          )}
+                          <div className="mt-1 flex items-center gap-2 pl-5 text-xs text-muted-foreground">
+                            {item.recent[0].is_fact === 0 && <Badge variant="muted">推断</Badge>}
+                            <span className="truncate">
+                              {item.recent[0].is_fact === 0 ? "依据：" : "原文："}
+                              {item.recent[0].strength_basis}
+                            </span>
+                          </div>
                         </div>
                       )}
                     </Card>

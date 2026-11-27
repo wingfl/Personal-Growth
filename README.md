@@ -254,6 +254,10 @@ python -m app.cli feishu logout        # 清除本机保存的用户令牌
   强度 1–5（1 参与 / 2 独立完成常规 / 3 独立负责复杂 / 4 定标准带人 / 5 定义方向并被外部验证）。
 - **确认**：建议在「复盘 → 待处理建议」里确认，或用 `Review.confirm_batch(job_id=...)` 批量确认；
   只有确认后的证据才进入画像。
+- **岗位链路**：周报常只写「XX 需求完成评审并推进」，不会写调研、PRD、方案。`capability infer`
+  按 `user_profile.current_title` 选择岗位链路（产品经理：调研与验证 → PRD 与方案 → 推进与协作 →
+  验收与复盘），对里程碑句子补出「落点 + 前一环」两项能力，写入时 `is_fact=0`、强度封顶 2，
+  页面用虚线和「推断」标签与原文证据分开；确认前请核对是否真的做过。
 - **查看**：`capability list`、`capability evidence CODE`，或界面「能力画像」页（雷达 + 分类卡片 +
   最近一条原文）。`/api/capabilities` 只读。
 

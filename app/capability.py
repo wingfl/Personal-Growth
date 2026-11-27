@@ -15,6 +15,7 @@ import re
 
 from .extract import ExtractError, parse_json_reply, render_prompt
 from .ids import now_iso, uuid7
+from .roles import INFERRED_STRENGTH, chain_text, implied_stages, role_of
 from .llm import LLMClient
 
 FRAMEWORK = "产品经理能力框架（自建 v1）"
@@ -122,7 +123,10 @@ def capabilities(store):
         SELECT c.id, c.code, c.name, c.definition, c.typical_behavior,
                cc.name AS category_name, cc.sort_order AS category_order,
                COUNT(e.id) AS evidence_count,
+               SUM(CASE WHEN e.is_fact = 0 THEN 1 ELSE 0 END) AS inferred_count,
+               SUM(CASE WHEN e.is_fact = 1 THEN 1 ELSE 0 END) AS fact_count,
                AVG(e.strength) AS avg_strength,
+               AVG(CASE WHEN e.is_fact = 1 THEN e.strength END) AS fact_avg_strength,
                MAX(e.occurred_at) AS last_evidence_at
           FROM capability c
           JOIN capability_category cc ON cc.id = c.category_id
@@ -143,7 +147,11 @@ def capabilities(store):
             "typical_behavior": row["typical_behavior"],
             "category": row["category_name"],
             "evidence_count": row["evidence_count"] or 0,
+            "inferred_count": row["inferred_count"] or 0,
+            "fact_count": row["fact_count"] or 0,
             "avg_strength": round(row["avg_strength"], 2) if row["avg_strength"] is not None else None,
+            "fact_avg_strength": (round(row["fact_avg_strength"], 2)
+                                  if row["fact_avg_strength"] is not None else None),
             "last_evidence_at": row["last_evidence_at"],
         })
     return out
@@ -154,6 +162,7 @@ def evidence(store, capability_id, limit=200):
         """
         SELECT e.id, e.evidence_type, e.strength, e.statement, e.strength_basis,
                e.occurred_at, e.target_type, e.target_id, e.origin,
+               e.is_fact, e.fact_basis,
                i.title AS item_title, i.project_id, p.name AS project_name, p.goal AS project_goal,
                e.created_at
           FROM capability_evidence e
@@ -166,6 +175,104 @@ def evidence(store, capability_id, limit=200):
         (capability_id, limit),
     )
     return [dict(row) for row in rows]
+
+
+def infer_chain(store, role=None, limit=None, dry_run=False):
+    """按岗位链路补出「一句话里程碑」背后的隐含环节（标记为推断，不是原文事实）。
+
+    只对已经确认的事项做；同一事项 + 同一能力已有证据或待审建议时跳过。
+    返回 {"role","chain","items","proposals","by_stage"}。
+    """
+    role = role or role_of(store)
+    caps = {row["code"]: row for row in capabilities(store) if row["evidence_count"] >= 0}
+    if not caps:
+        raise CapabilityError("能力词典为空：先运行 python -m app.cli capability seed")
+
+    covered = set()
+    for row in store.query(
+            "SELECT target_id, capability_id FROM capability_evidence WHERE deleted_at IS NULL"):
+        covered.add((row["target_id"], row["capability_id"]))
+    for row in store.query(
+            "SELECT proposed_payload FROM change_proposal WHERE target_entity_type = "
+            "'capability_evidence' AND status = 'pending' AND deleted_at IS NULL"):
+        try:
+            payload = json.loads(row["proposed_payload"] or "{}")
+        except ValueError:
+            continue
+        covered.add((payload.get("target_id"), payload.get("capability_id")))
+
+    items = store.query(
+        "SELECT id, title, content, occurred_at, is_routine FROM work_item "
+        "WHERE deleted_at IS NULL AND review_status = 'confirmed' AND is_routine = 0 "
+        "ORDER BY occurred_at ASC")
+    plan = []
+    for item in items:
+        text = "%s\n%s" % (item["title"] or "", item["content"] or "")
+        if len(text.strip()) < 10:
+            continue
+        matched = implied_stages(text, role)
+        if not matched:
+            continue
+        # 一句话的落点在最后一个命中阶段；补「它 + 前一环」两段，最像一个真实链路
+        picked = matched[-2:] if len(matched) > 1 else matched[-1:]
+        for stage, stage_caps in picked:
+            # 每个阶段固定取第一项能力：稳定、可预期，不会因为已覆盖就滑到下一个能力
+            code, name = stage_caps[0]
+            cap = caps.get(code)
+            if not cap or (item["id"], cap["id"]) in covered:
+                continue
+            covered.add((item["id"], cap["id"]))
+            plan.append((item, stage, cap, name))
+        if limit and len({entry[0]["id"] for entry in plan}) >= limit:
+            break
+
+    by_stage = {}
+    for _item, stage, _cap, _name in plan:
+        by_stage[stage] = by_stage.get(stage, 0) + 1
+    summary = {"role": role, "chain": chain_text(role),
+               "items": len({entry[0]["id"] for entry in plan}),
+               "proposals": len(plan), "by_stage": by_stage}
+    if dry_run or not plan:
+        return summary
+
+    batch_id = uuid7()
+    job_id = store.insert("ai_job", {
+        "job_type": "capability_evidence",
+        "trigger_type": "manual",
+        "input_scope": json.dumps({"batch_id": batch_id, "mode": "role_chain",
+                                   "role": role,
+                                   "item_ids": sorted({entry[0]["id"] for entry in plan})},
+                                  ensure_ascii=False),
+        "status": "succeeded",
+        "result_summary": "按岗位链路推断 %d 条证据建议（is_fact=0）" % len(plan),
+    })
+    for item, stage, cap, _name in plan:
+        store.insert("change_proposal", {
+            "job_id": job_id,
+            "batch_id": batch_id,
+            "change_type": "create",
+            "target_entity_type": "capability_evidence",
+            "proposed_payload": json.dumps({
+                "capability_id": cap["id"],
+                "evidence_type": "performance",
+                "target_type": "work_item",
+                "target_id": item["id"],
+                "statement": "推断：完成「%s」前通常还有%s环节" % ((item["title"] or "")[:40], stage),
+                "occurred_at": item["occurred_at"],
+                "strength": INFERRED_STRENGTH,
+                "strength_basis": (item["title"] or "")[:200],
+                "aspect_focus": cap["name"],
+                "is_fact": 0,
+                "fact_basis": "岗位链路推断（%s），原文没有直接陈述" % role,
+            }, ensure_ascii=False),
+            "diff_summary": "推断能力证据：%s · %s" % (cap["name"], item["title"] or ""),
+            "reason": "按岗位链路补出隐含环节；请在确认前核对是否真的做过",
+            "status": "pending",
+            "priority": 4,
+        })
+    store.commit()
+    summary["job_id"] = job_id
+    return summary
 
 
 class CapabilityMapper:

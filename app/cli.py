@@ -19,7 +19,7 @@ import urllib.parse
 
 from .archive import Archive, ArchiveError
 from .capability import (CapabilityMapper, capability_evidence, capability_rows,
-                         seed_capabilities)
+                         infer_chain, seed_capabilities)
 from .backup import BackupError, create_backup, verify_backup_file
 from .extract import ExtractError, Extraction, Review
 from .feishu import FeishuError, resolve_feishu_config
@@ -689,6 +689,20 @@ def _capability(args):
                                           row["statement"]))
                 if row["strength_basis"]:
                     print("      原文：%s" % row["strength_basis"][:80])
+        elif args.action == "infer":
+            result = infer_chain(store, role=args.role, limit=args.limit,
+                                 dry_run=args.dry_run)
+            print("岗位链路：%s" % result["chain"])
+            if args.dry_run:
+                print("干跑：%d 条事项可补 %d 条推断证据" % (result["items"], result["proposals"]))
+            elif result["proposals"]:
+                print("✓ 生成 %d 条推断建议（is_fact=0），分布：" % result["proposals"])
+                for stage, count in result["by_stage"].items():
+                    print("  %s：%d" % (stage, count))
+                print("  作业 %s" % result["job_id"])
+                print("  确认：python -m app.cli ai confirm --job %s" % result["job_id"])
+            else:
+                print("没有需要补的推断证据")
         elif args.action == "map":
             client = LLMClient(resolve_config(model=args.model))
             mapper = CapabilityMapper(store, client)
@@ -1416,13 +1430,14 @@ def build_parser():
     p.set_defaults(func=_profile)
 
     p = sub.add_parser("capability", help="能力词典与能力证据（第 5 步）")
-    p.add_argument("action", choices=["seed", "list", "profile", "evidence", "map"])
+    p.add_argument("action", choices=["seed", "list", "profile", "evidence", "map", "infer"])
     p.add_argument("code", nargs="?", help="evidence：能力 code 或名称")
     p.add_argument("--limit", type=int, help="map：最多标注多少条事项；evidence：最多列多少条")
     p.add_argument("--batch", type=int, default=25, help="map：每次请求多少条事项（默认 25）")
     p.add_argument("--dry-run", action="store_true", help="map：只打印提示词，不调用模型")
     p.add_argument("--max-tokens", type=int, help="map：单次回复的 token 预算")
     p.add_argument("--model", help="map：覆盖模型名")
+    p.add_argument("--role", help="infer：覆盖岗位（默认读个人档案的当前职位）")
     p.set_defaults(func=_capability)
 
     p = sub.add_parser("link", help="把来源片段关联到任意档案记录")

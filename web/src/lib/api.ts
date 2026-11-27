@@ -154,6 +154,8 @@ export type CapabilityEvidence = {
   occurred_at: string;
   item_title: string | null;
   project_name: string | null;
+  is_fact?: number;
+  fact_basis?: string | null;
 };
 
 export type Capability = {
@@ -164,7 +166,10 @@ export type Capability = {
   typical_behavior: string | null;
   category: string;
   evidence_count: number;
+  fact_count: number;
+  inferred_count: number;
   avg_strength: number | null;
+  fact_avg_strength: number | null;
   last_evidence_at: string | null;
   months: { month: string; count: number; avg_strength: number | null }[];
   recent: CapabilityEvidence[];
@@ -178,7 +183,10 @@ export type CapabilitiesPayload = {
     capability_count: number;
     covered: number;
     evidence_total: number;
+    fact_total: number;
+    inferred_total: number;
     avg_strength: number | null;
+    fact_avg_strength: number | null;
   };
   categories: { name: string; capabilities: Capability[] }[];
   items: Capability[];
