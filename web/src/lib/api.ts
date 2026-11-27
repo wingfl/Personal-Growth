@@ -14,6 +14,7 @@ export type ItemCard = {
 };
 
 export type ProjectCard = {
+  intro?: string | null;
   id: string;
   name: string;
   status: string | null;
@@ -25,6 +26,14 @@ export type ProjectCard = {
   item_count: number;
   last_activity?: string | null;
   updated_at?: string | null;
+};
+
+export type GrowthMonth = { month: string; label: string; fact: number; inferred: number };
+export type GrowthPayload = {
+  generated_at: string;
+  months: GrowthMonth[];
+  coverage: { month: string; label: string; covered: number }[];
+  totals: { evidence: number; fact: number; inferred: number; capabilities: number };
 };
 
 export type Summary = {

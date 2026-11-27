@@ -405,6 +405,7 @@ CREATE TABLE project (
   name TEXT NOT NULL,
   alias_names TEXT,
   background TEXT,
+  intro TEXT,
   goal TEXT,
   status TEXT NOT NULL DEFAULT 'unknown' CHECK (status IN ('planning', 'active', 'launched', 'maintaining', 'closed', 'paused', 'unknown')),
   project_type TEXT CHECK (project_type IN ('new_build', 'enhancement', 'maintenance', 'research', 'process', 'support', 'other')),

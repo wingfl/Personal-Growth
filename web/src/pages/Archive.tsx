@@ -13,7 +13,7 @@ import { day } from "@/lib/utils";
 type ItemsPayload = { total: number; items: ItemCard[] };
 type ProjectsPayload = { total: number; items: ProjectCard[] };
 type ProjectDetail = {
-  project: ProjectCard & { background?: string | null; outcome_summary?: string | null; contribution_summary?: string | null };
+  project: ProjectCard & { intro?: string | null; background?: string | null; outcome_summary?: string | null; contribution_summary?: string | null };
   items: (ItemCard & { domain_name?: string | null })[];
   item_count: number;
   by_type: { key: string; count: number }[];
@@ -194,8 +194,8 @@ export function Archive() {
                         {project.status ?? "未填"}
                       </Badge>
                     </div>
-                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                      {project.goal || "还没写目标"}
+                    <p className="mt-1 line-clamp-3 text-sm text-muted-foreground">
+                      {project.intro || project.goal || "暂无项目介绍"}
                     </p>
                     <div className="mt-2 flex items-center gap-2 text-2xs text-muted-foreground">
                       <span className="num">{project.item_count} 条事项</span>
@@ -236,6 +236,7 @@ export function Archive() {
                       </Button>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      <Field label="介绍" value={projectDetail.data.project.intro} />
                       <Field label="目标" value={projectDetail.data.project.goal} />
                       <Field label="背景" value={projectDetail.data.project.background} />
                       <Field label="结果" value={projectDetail.data.project.outcome_summary} />

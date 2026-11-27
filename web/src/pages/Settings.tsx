@@ -47,7 +47,7 @@ export function Settings() {
               <CardHeader>
                 <div>
                   <CardTitle className="text-base">身份与角色</CardTitle>
-                  <CardDescription>分析时用来理解你的语境</CardDescription>
+                  <CardDescription>用于分析时的角色语境</CardDescription>
                 </div>
                 <UserRound className="h-4 w-4 text-muted-foreground" aria-hidden />
               </CardHeader>
@@ -70,7 +70,7 @@ export function Settings() {
                   </>
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    还没有身份记录。执行 <code className="rounded bg-muted px-1 py-0.5">python -m app.cli profile set --title 你的职位 --set</code> 后，目标与建议会按角色语境解读。
+                    尚无身份记录。执行 <code className="rounded bg-muted px-1 py-0.5">python -m app.cli profile set --title 你的职位 --set</code> 后，目标与建议按角色语境解读。
                   </p>
                 )}
               </CardContent>

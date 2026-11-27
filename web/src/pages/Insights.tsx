@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { Waypoints } from "lucide-react";
-import { useApi } from "@/lib/api";
+import { useApi, type CapabilitiesPayload, type GrowthPayload } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EChart } from "@/components/charts/EChart";
+import { growthOption } from "@/lib/charts";
 import { EmptyState, ErrorState, PageSkeleton } from "@/components/ui/states";
 import { ITEM_TYPE_LABEL as TYPE_LABEL } from "@/lib/labels";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,8 @@ const RANGES = [
 
 export function Insights() {
   const [range, setRange] = useState("26");
+  const growth = useApi<GrowthPayload>("/api/growth?months=12");
+  const caps = useApi<CapabilitiesPayload>("/api/capabilities");
   const trend = useApi<TrendPayload>(`/api/insights/trend?weeks=${range}`);
   const mix = useApi<MixPayload>("/api/insights/mix");
   const heat = useApi<HeatPayload>(`/api/insights/heatmap?weeks=${range}`);
@@ -144,13 +147,43 @@ export function Insights() {
     };
   }, [heat.data]);
 
+  const radarOption = useMemo(() => {
+    const items = caps.data?.items ?? [];
+    return {
+      radar: {
+        radius: "62%",
+        splitNumber: 4,
+        indicator: items.map((item) => ({ name: item.name, max: 5 })),
+        axisName: { color: "#71717a", fontSize: 12 },
+        splitLine: { lineStyle: { color: "rgba(128,128,128,.2)" } },
+        splitArea: { areaStyle: { color: ["transparent"] } },
+        axisLine: { lineStyle: { color: "rgba(128,128,128,.2)" } },
+      },
+      tooltip: {},
+      series: [
+        {
+          type: "radar",
+          data: [
+            {
+              value: items.map((item) => item.avg_strength),
+              name: "平均证据强度",
+              areaStyle: { color: "rgba(79,70,229,.16)" },
+              lineStyle: { color: "#4f46e5", width: 2 },
+              itemStyle: { color: "#4f46e5" },
+            },
+          ],
+        },
+      ],
+    };
+  }, [caps.data]);
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">数据分析</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            只用真实数据；数据不够的地方直接说明
+          <p className="mt-1 text-base text-muted-foreground">
+            能力证据按月统计；数据不足的模块显示空态
           </p>
         </div>
         <div className="flex items-center gap-1 rounded-md border border-border bg-card p-0.5">
@@ -171,10 +204,31 @@ export function Insights() {
       <Card>
         <CardHeader>
           <div>
-            <CardTitle>成长趋势</CardTitle>
+            <CardTitle>成长轨迹</CardTitle>
             <CardDescription>
-              柱是每周事项数，线是 4 周移动平均；共 {trend.data?.total ?? "…"} 条事项
+              按月新增的能力证据（原文 + 推断）与能力覆盖；不用事项数代替成长
             </CardDescription>
+          </div>
+          <Badge variant="muted">capability_evidence</Badge>
+        </CardHeader>
+        <CardContent className="pt-1">
+          {growth.loading ? (
+            <PageSkeleton rows={0} />
+          ) : growth.error ? (
+            <ErrorState message={growth.error} onRetry={growth.reload} />
+          ) : growth.data && growth.data.months.length > 0 ? (
+            <EChart option={growthOption(growth.data)} height={300} />
+          ) : (
+            <EmptyState title="还没有能力证据" description="先在能力画像页确认证据，再回来看趋势。" />
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div>
+            <CardTitle>事项节奏</CardTitle>
+            <CardDescription>每周事项数与 4 周移动平均，只反映交付节奏，不当作成长指标</CardDescription>
           </div>
           <Badge variant="muted">work_item</Badge>
         </CardHeader>
@@ -184,7 +238,7 @@ export function Insights() {
           ) : trend.error ? (
             <ErrorState message={trend.error} onRetry={trend.reload} />
           ) : (
-            <EChart option={trendOption} height={300} />
+            <EChart option={trendOption} height={240} />
           )}
         </CardContent>
       </Card>
@@ -231,17 +285,25 @@ export function Insights() {
         <Card>
           <CardHeader>
             <div>
-              <CardTitle>能力雷达</CardTitle>
-              <CardDescription>按评价维度聚合</CardDescription>
+              <CardTitle>能力覆盖</CardTitle>
+              <CardDescription>
+                半径是平均证据强度（1–5）；{caps.data?.summary.covered ?? 0}/{caps.data?.summary.capability_count ?? 0} 项有证据
+              </CardDescription>
             </div>
-            <Badge variant="warning">数据未建立</Badge>
+            <Badge variant="info">capability</Badge>
           </CardHeader>
-          <CardContent>
-            <EmptyState
-              title="能力证据还没建立"
-              description="第 5 步（能力词典与能力证据）尚未完成，现在没有可画的数据。这一步做完后，这里会显示各维度的证据强度与缺口。"
-              icon={<Waypoints className="h-6 w-6" />}
-            />
+          <CardContent className="pt-1">
+            {caps.loading ? (
+              <PageSkeleton rows={0} />
+            ) : caps.data && caps.data.items.some((item) => item.evidence_count > 0) ? (
+              <EChart option={radarOption} height={280} />
+            ) : (
+              <EmptyState
+                title="还没有能力证据"
+                description="在能力画像页运行标注并确认建议后，这里会显示覆盖与强度。"
+                icon={<Waypoints className="h-6 w-6" />}
+              />
+            )}
           </CardContent>
         </Card>
 
@@ -256,7 +318,7 @@ export function Insights() {
           <CardContent>
             <EmptyState
               title="还没有阶段快照"
-              description="growth_stage 与 growth_snapshot 目前都是 0 条。第 6–7 步（特征画像、成长曲线）完成后，这里才有对比可言。"
+              description="growth_stage 与 growth_snapshot 尚无数据；阶段快照生成后才能做对比。"
             />
           </CardContent>
         </Card>

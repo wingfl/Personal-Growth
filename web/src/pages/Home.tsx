@@ -1,77 +1,34 @@
 import { Link } from "react-router-dom";
 import { ArrowRight, FileText, FolderKanban, Sparkles } from "lucide-react";
-import { useApi, type Summary } from "@/lib/api";
+import { useApi, type GrowthPayload, type Summary } from "@/lib/api";
 import { StatCard } from "@/components/ui/stat-card";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageSkeleton, ErrorState, EmptyState } from "@/components/ui/states";
 import { EChart } from "@/components/charts/EChart";
+import { growthOption } from "@/lib/charts";
 import { day, relativeDays } from "@/lib/utils";
-
-function trendOption(summary: Summary) {
-  const weeks = summary.trend.weeks;
-  const moving = weeks.map((_, index) => {
-    const window = weeks.slice(Math.max(0, index - 3), index + 1);
-    const total = window.reduce((sum, point) => sum + point.count, 0);
-    return Math.round((total / window.length) * 10) / 10;
-  });
-  return {
-    grid: { left: 8, right: 8, top: 24, bottom: 4, containLabel: true },
-    tooltip: { trigger: "axis" },
-    xAxis: {
-      type: "category",
-      data: weeks.map((point) => point.label),
-      axisLine: { lineStyle: { color: "rgba(128,128,128,.35)" } },
-      axisTick: { show: false },
-      axisLabel: { fontSize: 12, color: "#71717a" },
-    },
-    yAxis: {
-      type: "value",
-      splitLine: { lineStyle: { color: "rgba(128,128,128,.15)" } },
-      axisLabel: { fontSize: 12, color: "#71717a" },
-    },
-    series: [
-      {
-        name: "每周事项",
-        type: "bar",
-        data: weeks.map((point) => point.count),
-        barMaxWidth: 22,
-        itemStyle: { color: "#4f46e5", borderRadius: [4, 4, 0, 0] },
-      },
-      {
-        name: "4 周移动平均",
-        type: "line",
-        data: moving,
-        smooth: true,
-        symbol: "none",
-        lineStyle: { color: "#0d9488", width: 2 },
-      },
-    ],
-  };
-}
 
 export function Home() {
   const { data, error, loading, reload } = useApi<Summary>("/api/summary");
+  const growth = useApi<GrowthPayload>("/api/growth?months=12");
 
   if (loading) return <PageSkeleton />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
   if (!data) return null;
 
-  const { counts, trend, todos } = data;
-  const series = trend.weeks.map((point) => point.count);
-  const conclusion =
-    trend.delta_pct === null
-      ? "数据还不够比较，先积累几周"
-      : trend.delta_pct >= 0
-        ? `最近 4 周事项比前 4 周多 ${trend.delta_pct}%`
-        : `最近 4 周事项比前 4 周少 ${Math.abs(trend.delta_pct)}%`;
+  const { counts, todos } = data;
+  const g = growth.data;
+  const conclusion = g
+    ? `近 12 个月新增 ${g.totals.evidence} 条证据，覆盖 ${g.totals.capabilities} 项能力（原文 ${g.totals.fact} · 推断 ${g.totals.inferred}）`
+    : "按月统计能力证据，不使用事项数代替成长";
 
   return (
     <div className="space-y-6">
       <section className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">你现在的成长状态</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">成长概览</h2>
           <p className="mt-2 text-base text-muted-foreground">
             {counts.documents} 篇资料 · {counts.fragments} 个片段 · {counts.items} 条事项
           </p>
@@ -84,7 +41,7 @@ export function Home() {
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="累计事项" value={counts.items}  series={series} />
+        <StatCard label="累计事项" value={counts.items} />
         <StatCard label="进行中项目" value={counts.active_projects} hint={`共 ${counts.projects} 个项目`} />
         <StatCard label="覆盖资料" value={counts.documents} hint={`${counts.fragments} 个原文片段`} />
         <StatCard
@@ -99,13 +56,19 @@ export function Home() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <div>
-              <CardTitle>近 12 周事项趋势</CardTitle>
+              <CardTitle>成长轨迹</CardTitle>
               <CardDescription>{conclusion}</CardDescription>
             </div>
-            <Badge variant="muted">周</Badge>
+            <Badge variant="muted">月</Badge>
           </CardHeader>
           <CardContent className="pt-2">
-            <EChart option={trendOption(data)} height={260} />
+            {growth.loading ? (
+              <PageSkeleton rows={0} />
+            ) : growth.data && growth.data.months.length > 0 ? (
+              <EChart option={growthOption(growth.data)} height={260} />
+            ) : (
+              <EmptyState title="还没有能力证据" description="能力画像里确认证据后，这里按月显示增长。" />
+            )}
           </CardContent>
         </Card>
 
@@ -130,7 +93,7 @@ export function Home() {
                     to="/archive"
                     label="事项缺工作领域"
                     value={todos.items_missing_domain}
-                    hint="补齐后领域分布才准确"
+                    hint="补齐后领域分布可计算"
                   />
                 )}
                 {todos.projects_missing_goal > 0 && (
@@ -138,7 +101,7 @@ export function Home() {
                     to="/goals"
                     label="项目缺目标"
                     value={todos.projects_missing_goal}
-                    hint="补目标才能判断方向"
+                    hint="缺少目标字段"
                   />
                 )}
               </>

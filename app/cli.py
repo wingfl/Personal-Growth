@@ -18,6 +18,7 @@ import sys
 import urllib.parse
 
 from .archive import Archive, ArchiveError
+from .projects import ProjectCurator, make_curator
 from .market import ingest_cli as market_ingest_cli, summary as market_summary
 from .capability import (CapabilityMapper, capability_evidence, capability_rows,
                          infer_chain, seed_capabilities)
@@ -317,6 +318,27 @@ def _project(args):
             for p in prov:
                 print("  ←《%s》%s：%s" % (p["document_title"], p["heading_path"] or "",
                                           p["text"][:60].replace("\n", " ")))
+        elif args.action == "intro":
+            curator = make_curator(store, model=getattr(args, "model", None))
+            if getattr(args, "all", False):
+                rows = store.list("project", limit=100000, order_by="name ASC")
+                if not getattr(args, "force", False):
+                    rows = [r for r in rows if not (r.get("intro") or "").strip()]
+            else:
+                rows = [arc._require("project", args.id or args.keep)]
+            done = 0
+            for row in rows:
+                text = curator.generate(row, model=getattr(args, "model", None))
+                if not text:
+                    print("· %s：没有事项，跳过" % row["name"])
+                    continue
+                if args.dry_run:
+                    print("· %s：%s" % (row["name"], text))
+                else:
+                    curator.write(row["id"], text)
+                    print("✓ %s：%s" % (row["name"], text))
+                done += 1
+            print("共处理 %d 个项目" % done)
         elif args.action == "merge":
             report = arc.merge_records("project", args.keep, args.drop, note=args.note)
             print("✓ 已归并 %d 条重复项目到 %s" % (len(report["merged"]), args.keep))
@@ -1338,7 +1360,7 @@ def build_parser():
         parser.add_argument("--basis", help="判定为推断时的事实依据（is_fact=false 必填）")
 
     p = sub.add_parser("project", help="项目档案")
-    p.add_argument("action", choices=["add", "list", "show", "merge"])
+    p.add_argument("action", choices=["add", "list", "show", "merge", "intro"])
     p.add_argument("name", nargs="?", help="add：项目名称")
     p.add_argument("--id", help="show：项目ID")
     p.add_argument("--keep", help="merge：保留哪条")
@@ -1358,6 +1380,10 @@ def build_parser():
     p.add_argument("--scope", help="个人负责的部分")
     p.add_argument("--contribution", help="实际贡献")
     p.add_argument("--outcome", help="项目层面结果")
+    p.add_argument("--all", action="store_true", help="intro：给所有还没有介绍的项目生成")
+    p.add_argument("--model", help="intro：指定模型")
+    p.add_argument("--dry-run", action="store_true", help="intro：只打印，不写入")
+    p.add_argument("--force", action="store_true", help="intro：已有介绍也重新生成")
     p.add_argument("--limit", type=int, default=50)
     add_fragments(p)
     p.set_defaults(func=_project)

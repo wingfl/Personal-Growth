@@ -97,7 +97,7 @@ export function Goals() {
       <section>
         <h2 className="text-2xl font-semibold tracking-tight">成长目标</h2>
         <p className="mt-2 max-w-2xl text-base text-muted-foreground">
-          你为自己定的、可验收的成长目标；下面是根据真实数据算出的补全建议。
+          个人设定的、可验收的成长目标；下方是系统按真实数据算出的补全建议。
         </p>
       </section>
 
@@ -119,7 +119,7 @@ export function Goals() {
             ) : (
               <EmptyState
                 title="还没有可跟踪的目标"
-                description="目标由你确认后建立：命令行执行 goal add，填上周期与达成标准；系统只会给建议，不会替你定目标。"
+                description="目标经确认后建立：命令行执行 goal add，填写周期与达成标准；系统只给建议。"
                 icon={<Target className="h-6 w-6" />}
               />
             )}
@@ -177,7 +177,7 @@ export function Goals() {
                 <Flag className="h-4 w-4 text-muted-foreground" aria-hidden />
                 <div>
                   <CardTitle className="text-base">目标与建议的区别</CardTitle>
-                  <CardDescription>建议是系统算出来的；目标是你确认后才成立的</CardDescription>
+                  <CardDescription>建议由系统计算；目标经确认后成立</CardDescription>
                 </div>
               </div>
             </CardHeader>
@@ -185,8 +185,8 @@ export function Goals() {
               {data?.note}
               <br />
               目标存在 <code className="rounded bg-muted px-1 py-0.5 text-xs">growth_goal</code> 表，
-              进度只在你确认后更新（<code className="rounded bg-muted px-1 py-0.5 text-xs">goal update --progress</code>）；
-              AI 可以建议目标，但不会直接改你的正式档案。
+              进度仅在本人更新后变化（<code className="rounded bg-muted px-1 py-0.5 text-xs">goal update --progress</code>）；
+              AI 可建议目标，不直接写入正式档案。
             </CardContent>
           </Card>
 

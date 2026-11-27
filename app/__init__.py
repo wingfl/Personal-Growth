@@ -2,7 +2,7 @@
 """个人成长档案系统 —— 实现包。
 
 当前进度（对应需求第 7 章实施顺序）：
-  1. 核心数据模型                ✅ schema/model.json + schema/schema.sql（50 实体 / 1024 字段 / 57 枚举）
+  1. 核心数据模型                ✅ schema/model.json + schema/schema.sql（50 实体 / 1025 字段 / 57 枚举）
   2. 原始资料存储与来源追溯      ✅ app/importers.py（含 .zip、飞书导出包）
   3. 项目 / 系统 / 模块 / 事项档案 ✅ app/archive.py
   4. AI 提取、匹配、归并、审核    ✅ app/llm.py + app/extract.py（真实模型，AI 只提建议）

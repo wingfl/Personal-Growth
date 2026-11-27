@@ -53,14 +53,14 @@ function Band({ group, current }: { group: MarketGroup; current: number | null }
             <div
               className="absolute -top-1 h-5 w-2 -translate-x-1/2 rounded-sm border-2 border-background bg-amber-500 shadow"
               style={{ left: left(current) }}
-              title={`你的月薪 ${current}`}
+              title={`月薪 ${current}`}
             />
           )}
         </div>
       )}
       <div className="mt-1 flex justify-between text-xs text-muted-foreground">
         <span>P25</span>
-        <span>{current != null ? "琥珀色标记 = 你的当前月薪" : "profile set --current-salary 补充当前月薪后可对照"}</span>
+        <span>{current != null ? "琥珀色标记 = 当前月薪" : "profile set --current-salary 补充后可与样本对照"}</span>
         <span>P75</span>
       </div>
     </div>
@@ -115,7 +115,7 @@ export function Market() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">市场定位</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          用公开招聘样本看「同类岗位要什么、值多少」，再对照自己的证据，而不是给你打一个总分。
+          用公开招聘样本看同类岗位的要求与薪资带，再对照已有证据；不计算综合评分。
         </p>
       </header>
 
@@ -171,7 +171,7 @@ export function Market() {
           <p>{data?.caveat}</p>
           <p>
             薪资带是「区间中值」的分位数，不是 offer 价；高频标签只能说明招聘方怎么写要求，不等于岗位真实门槛。
-            真正要补什么，仍然回到能力画像里看你缺哪类证据。
+            需要补什么，回到能力画像查看缺失的证据类型。
           </p>
         </CardContent>
       </Card>

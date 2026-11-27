@@ -44,6 +44,23 @@ def _month_key(value):
     return str(value)[:7]
 
 
+def _now():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _month_range(start, end):
+    """闭区间内的连续月份，形如 ["2026-01", "2026-02"]。"""
+    y, m = int(start[:4]), int(start[5:7])
+    years, months = int(end[:4]), int(end[5:7])
+    out = []
+    while (y, m) <= (years, months):
+        out.append("%04d-%02d" % (y, m))
+        m += 1
+        if m > 12:
+            y, m = y + 1, 1
+    return out
+
+
 class Api:
     """只读查询层：把库里的行聚合成页面需要的形状。"""
 
@@ -202,6 +219,7 @@ class Api:
             cards.append({"id": row["id"], "name": row["name"],
                           "status": row.get("status"), "project_type": row.get("project_type"),
                           "my_role": row.get("my_role"), "goal": row.get("goal"),
+                          "intro": row.get("intro"),
                           "start_date": row.get("start_date"), "end_date": row.get("end_date"),
                           "item_count": counts.get(row["id"], 0),
                           "last_activity": latest.get(row["id"])})
@@ -341,6 +359,48 @@ class Api:
             })
         return out
 
+    def growth(self, months=12):
+        """成长轨迹：按月统计新增能力证据（原文/推断），以及能力覆盖的累积。
+
+        不用事项数当成长指标——事项代表工作量，证据才代表能力；两者分开呈现。
+        """
+        rows = self.store.query(
+            "SELECT substr(occurred_at, 1, 7) AS m, "
+            "SUM(CASE WHEN is_fact = 1 THEN 1 ELSE 0 END) AS fact, "
+            "SUM(CASE WHEN is_fact = 0 THEN 1 ELSE 0 END) AS inferred "
+            "FROM capability_evidence WHERE occurred_at IS NOT NULL GROUP BY m ORDER BY m"
+        )
+        edge = self.store.query(
+            "SELECT capability_id, MIN(substr(occurred_at, 1, 7)) AS m "
+            "FROM capability_evidence WHERE occurred_at IS NOT NULL GROUP BY capability_id"
+        )
+        by_month = {row["m"]: row for row in rows}
+        firsts = {}
+        for row in edge:
+            firsts.setdefault(row["m"], 0)
+            firsts[row["m"]] += 1
+        # 补齐连续月份，避免图上出现断点
+        keys = sorted(set(by_month) | set(firsts))
+        if not keys:
+            return {"generated_at": _now(), "months": [], "coverage": [], "totals": {
+                "evidence": 0, "fact": 0, "inferred": 0, "capabilities": 0}}
+        series = _month_range(keys[0], keys[-1])[-months:]
+        covered = 0
+        coverage, data = [], []
+        for key in series:
+            row = by_month.get(key)
+            covered += firsts.get(key, 0)
+            data.append({"month": key, "label": key[2:], "fact": int(row["fact"] if row else 0),
+                         "inferred": int(row["inferred"] if row else 0)})
+            coverage.append({"month": key, "label": key[2:], "covered": covered})
+        total = self.store.query(
+            "SELECT COUNT(*) AS n, SUM(CASE WHEN is_fact = 1 THEN 1 ELSE 0 END) AS fact "
+            "FROM capability_evidence")[0]
+        return {"generated_at": _now(), "months": data, "coverage": coverage,
+                "totals": {"evidence": int(total["n"] or 0), "fact": int(total["fact"] or 0),
+                           "inferred": int(total["n"] or 0) - int(total["fact"] or 0),
+                           "capabilities": len({r["capability_id"] for r in edge})}}
+
     def capabilities(self):
         """能力画像：只呈现已确认证据的数量与强度，不生成总分。"""
         from .capability import (FRAMEWORK, LEVEL_SCALE, capability_evidence,
@@ -454,9 +514,9 @@ class Api:
         if missing_domain:
             suggestions.append({
                 "id": "domain-gap", "kind": "data", "severity": "medium",
-                "title": "还有 %d 条事项没有标注工作领域" % len(missing_domain),
-                "rationale": "领域是成长分析的分组维度；缺了它，领域分布与阶段对比都不完整。",
-                "action": "在成长档案里逐条补领域，或后续用 AI 归类",
+                "title": "%d 条事项未标注工作领域" % len(missing_domain),
+                "rationale": "工作领域是成长分析的分组维度；未标注时无法计算领域分布与阶段对比。",
+                "action": "在成长档案中逐条补全，或运行 AI 归类后确认",
                 "count": len(missing_domain)})
         no_goal = [p for p in projects.values()
                    if p.get("status") in ("active", "in_progress", "planning")
@@ -464,9 +524,9 @@ class Api:
         if no_goal:
             suggestions.append({
                 "id": "goal-gap", "kind": "data", "severity": "medium",
-                "title": "%d 个进行中项目没有写目标" % len(no_goal),
-                "rationale": "项目目标是判断「这件事是否值得做」的依据，也是阶段复盘的输入。",
-                "action": "打开项目详情补充 goal 字段",
+                "title": "%d 个进行中项目未写目标" % len(no_goal),
+                "rationale": "项目目标是取舍判断与阶段复盘的输入。",
+                "action": "在项目详情中补充目标字段",
                 "count": len(no_goal)})
         thin = [p for p in projects.values() if p.get("item_count") == 0]
         thin_projects = [p for p in projects.values()
@@ -475,8 +535,8 @@ class Api:
             suggestions.append({
                 "id": "thin-projects", "kind": "insight", "severity": "low",
                 "title": "%d 个项目只有一条事项记录" % len(thin_projects),
-                "rationale": "单条记录的项目可能是一次性杂事，考虑合并到相邻项目或标为不纳入统计。",
-                "action": "在项目页做合并或归档",
+                "rationale": "单条记录的项目可能属于一次性事务；合并到相邻项目或归档可减少统计噪声。",
+                "action": "在项目页合并或归档",
                 "count": len(thin_projects)})
         gaps = self.store.query(
             "SELECT capability_id, COUNT(*) AS n FROM capability_evidence "
@@ -485,15 +545,15 @@ class Api:
             suggestions.append({
                 "id": "capability-gap", "kind": "growth", "severity": "high",
                 "title": "%d 项能力证据待补" % len(gaps),
-                "rationale": "能力判断需要工作证据支撑，缺证据的能力不能写进画像与材料。",
-                "action": "为每项能力补充对应事项与成果",
+                "rationale": "能力判断需要工作证据支撑；缺少证据的能力不会进入画像与材料。",
+                "action": "为对应能力补充事项或成果证据",
                 "count": len(gaps)})
         if not self.store.count("capability"):
             suggestions.append({
                 "id": "capability-empty", "kind": "growth", "severity": "high",
-                "title": "能力词典还没有建立",
-                "rationale": "第 5 步（能力词典与能力证据）尚未实现，当前无法生成能力雷达与成长目标。",
-                "action": "完成第 5 步后，这里会自动出现「补齐某项能力」的具体目标",
+                "title": "能力词典尚未建立",
+                "rationale": "没有能力词典时无法生成能力画像与成长目标。",
+                "action": "运行 capability seed 建立能力词典",
                 "count": 0})
         return {"generated_at": now_iso(), "goals": self._goal_cards(),
                 "suggestions": suggestions, "persisted": True,
@@ -568,6 +628,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(api.project(path.rsplit("/", 1)[-1]))
             if path == "/api/documents":
                 return self._json(api.documents(params))
+            if path == "/api/growth":
+                return self._json(api.growth(int(params.get("months") or 12)))
             if path == "/api/insights/trend":
                 return self._json(api.trend(params))
             if path == "/api/insights/mix":
