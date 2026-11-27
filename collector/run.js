@@ -88,12 +88,21 @@ async function main() {
     await browser.close();
   }
 
-  const items = Array.from(byId.values());
+  let items = Array.from(byId.values());
+  // 从最新发布开始用：先按发布日期倒序，必要时只保留最近 N 天
+  items.sort((a, b) => String(b.published_at || "").localeCompare(String(a.published_at || "")));
+  if (sinceDays > 0) {
+    const floor = new Date(Date.now() - sinceDays * 86400000).toISOString().slice(0, 10);
+    const before = items.length;
+    items = items.filter((x) => !x.published_at || x.published_at >= floor);
+    log(`按 ${sinceDays} 天过滤：${before} → ${items.length} 条`);
+  }
   const stamp = new Date().toISOString().slice(0, 10);
   const outFile = path.join(outDir, `51job-${city}-${stamp}.jsonl`);
   fs.writeFileSync(outFile, items.map((x) => JSON.stringify(x)).join("\n") + (items.length ? "\n" : ""), "utf8");
   meta.finished_at = new Date().toISOString();
   meta.total_unique = items.length;
+  meta.newest_published_at = items[0] && items[0].published_at || null;
   fs.writeFileSync(path.join(outDir, "meta.json"), JSON.stringify(meta, null, 2), "utf8");
   log(`完成：${items.length} 条唯一岗位 → ${outFile}`);
   log(`覆盖：${meta.sources && Object.entries(meta.sources).map(([k, v]) => `${k} ${v.fetched}/${v.total ?? "?"}`).join("；")}`);

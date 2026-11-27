@@ -84,3 +84,72 @@ class TestIngest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class _StoreCase(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.tmp, "t.db")
+        Store.init(self.db_path)
+        self.store = Store(self.db_path)
+
+    def tearDown(self):
+        self.store.close()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+
+class TestMarketAnalysis(_StoreCase):
+    def _seed(self):
+        rows = [
+            {"platform": "51job", "external_id": "a", "title": "AI产品经理", "city": "杭州",
+             "salary_text": "1.5-2万", "salary_min": 15000, "salary_max": 20000, "tags": ["数据分析", "PRD"], "keyword": "AI产品经理",
+             "fetched_at": "2026-11-27T00:00:00Z"},
+            {"platform": "51job", "external_id": "b", "title": "产品经理", "city": "杭州",
+             "salary_text": "1-1.2万", "salary_min": 10000, "salary_max": 12000, "tags": ["用户调研"], "keyword": "产品经理",
+             "fetched_at": "2026-11-27T00:00:00Z"},
+            {"platform": "51job", "external_id": "c", "title": "高级产品经理", "city": "杭州",
+             "salary_text": "2.5-3万", "salary_min": 25000, "salary_max": 30000, "tags": ["数据分析", "跨团队协作"], "keyword": "产品经理",
+             "fetched_at": "2026-11-27T00:00:00Z"},
+        ]
+        for row in rows:
+            self.store.insert("job_posting", row, actor_type="user", remark="test")
+        self.store.commit()
+
+    def test_analyze_position_and_gaps(self):
+        from app.market import analyze
+        self._seed()
+        data = analyze(self.store, city="杭州", salary=12000)
+        self.assertEqual(data["samples"], 3)
+        self.assertIsNotNone(data["p50"])
+        self.assertIn(data["band"], ("low", "mid", "high"))
+        self.assertTrue(data["gaps"])
+        self.assertLessEqual(len(data["recommendations"]), 2)
+        for gap in data["gaps"]:
+            self.assertGreaterEqual(gap["high_share"], 0)
+
+    def test_requirement_extraction(self):
+        from app.market import requirements_of
+        codes = [c for c, _ in requirements_of({"title": "AI产品经理", "tags": ["数据分析"], "jd_text": "负责 PRD 与跨团队协作"})]
+        self.assertIn("PU3", codes)
+        self.assertIn("PU2", codes)
+        self.assertIn("CO1", codes)
+
+    def test_benchmark_add_is_idempotent(self):
+        from app.market import benchmark_add, benchmarks
+        benchmark_add(self.store, "产品经理", p50=20000, source="报告A")
+        benchmark_add(self.store, "产品经理", p50=22000, source="报告A")
+        rows = benchmarks(self.store)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["p50"], 22000)
+
+
+class TestPortable(_StoreCase):
+    def test_export_import_round_trip(self):
+        import os, tempfile
+        from app import portable
+        zip_path = os.path.join(tempfile.mkdtemp(), "a.zip")
+        target = os.path.join(tempfile.mkdtemp(), "b.db")
+        size = portable.export_db(self.db_path, zip_path)
+        self.assertGreater(size, 0)
+        manifest = portable.import_db(zip_path, target)
+        self.assertEqual(manifest["format"], "growth-archive/1")
+        self.assertTrue(os.path.exists(target))

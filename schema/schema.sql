@@ -556,6 +556,7 @@ CREATE TABLE job_posting (
   experience TEXT,
   degree TEXT,
   tags TEXT,
+  jd_text TEXT,
   industry TEXT,
   company_size TEXT,
   company_type TEXT,

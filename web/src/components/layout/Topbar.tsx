@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
-import { MoonStar, RefreshCw, SunMedium } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { MoonStar, RefreshCw, Settings as SettingsIcon, SunMedium } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -41,6 +41,11 @@ export function Topbar() {
         </Button>
         <Button variant="ghost" size="icon" onClick={() => setDark(!dark)} aria-label="切换主题">
           {dark ? <SunMedium className="h-4 w-4" /> : <MoonStar className="h-4 w-4" />}
+        </Button>
+        <Button asChild variant="ghost" size="icon" aria-label="设置">
+          <Link to="/settings">
+            <SettingsIcon className="h-4 w-4" />
+          </Link>
         </Button>
       </div>
     </header>

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/input";
+import { Rhythm } from "./Insights";
 import { ErrorState, EmptyState, PageSkeleton } from "@/components/ui/states";
 import { ITEM_TYPE_LABEL as TYPE_LABEL, DATE_PRECISION_LABEL } from "@/lib/labels";
 import { day } from "@/lib/utils";
@@ -73,6 +74,7 @@ export function Archive() {
           <TabsTrigger value="items">事项 {items.data ? `(${items.data.total})` : ""}</TabsTrigger>
           <TabsTrigger value="projects">项目 {projects.data ? `(${projects.data.total})` : ""}</TabsTrigger>
           <TabsTrigger value="documents">资料 {documents.data ? `(${documents.data.total})` : ""}</TabsTrigger>
+          <TabsTrigger value="rhythm">节奏</TabsTrigger>
         </TabsList>
 
         <TabsContent value="items" className="mt-4 space-y-4">
@@ -331,6 +333,10 @@ export function Archive() {
             </div>
           )}
         </TabsContent>
+        <TabsContent value="rhythm" className="mt-4">
+          <Rhythm />
+        </TabsContent>
+
       </Tabs>
     </div>
   );

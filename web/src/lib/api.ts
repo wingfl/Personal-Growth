@@ -216,6 +216,40 @@ export type MarketGroup = {
   vs_current_pct?: number | null;
 };
 
+export type SalaryBand = {
+  key: "low" | "mid" | "high";
+  name: string;
+  postings: number;
+  salary_from: number | null;
+  salary_to: number | null;
+  requirements: { code: string; name: string; count: number; share: number }[];
+};
+
+export type CapabilityGap = {
+  code: string;
+  name: string;
+  high_count: number;
+  high_share: number;
+  evidence: number;
+  examples: string[];
+  score: number;
+};
+
+export type SalaryBenchmark = {
+  role_name: string;
+  city: string;
+  level: string;
+  p25: number | null;
+  p50: number | null;
+  p75: number | null;
+  period: string;
+  source: string;
+  source_url: string;
+  sample_size: number | null;
+  as_of: string;
+  note: string;
+};
+
 export type MarketPayload = {
   generated_at: string;
   role: string;
@@ -224,6 +258,19 @@ export type MarketPayload = {
   total_postings: number;
   current_salary: number | null;
   expected_salary: number | null;
+  salary_samples: number;
+  p25: number | null;
+  p50: number | null;
+  p75: number | null;
+  percentile: number | null;
+  band: "low" | "mid" | "high" | null;
+  band_name: string | null;
+  next_band_at: number | null;
+  to_next_band: number | null;
+  bands: SalaryBand[];
+  gaps: CapabilityGap[];
+  recommendations: CapabilityGap[];
+  benchmarks: SalaryBenchmark[];
   groups: MarketGroup[];
   chain: string | null;
   caveat: string;

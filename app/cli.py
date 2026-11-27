@@ -20,6 +20,8 @@ import urllib.parse
 from .archive import Archive, ArchiveError
 from .projects import ProjectCurator, make_curator
 from .market import ingest_cli as market_ingest_cli, summary as market_summary
+from .market import benchmark_add as market_benchmark_add, benchmarks as market_benchmarks
+from . import portable
 from .capability import (CapabilityMapper, capability_evidence, capability_rows,
                          infer_chain, seed_capabilities)
 from .backup import BackupError, create_backup, verify_backup_file
@@ -745,6 +747,19 @@ def _capability(args):
         store.close()
 
 
+def _portable(args):
+    if args.action == "export":
+        size = portable.export_db(args.db, args.path)
+        print("✓ 已导出 %s（%.1f KB）" % (args.path, size / 1024.0))
+        print("  换机器后：python -m app.cli --db data/growth.db portable import %s" % args.path)
+        return
+    manifest = portable.import_db(args.path, args.db, force=args.force)
+    print("✓ 已导入到 %s" % args.db)
+    if manifest.get("counts"):
+        print("  记录数：%s" % "、".join("%s %s" % (k, v) for k, v in manifest["counts"].items()))
+    print("  下一步：python -m app.web --port 8765")
+
+
 def _market(args):
     store = Store(args.db)
     try:
@@ -779,6 +794,26 @@ def _market(args):
             }, actor_type="user", remark="新增目标岗位")
             store.commit()
             print("✓ 新增目标岗位 %s（%s）" % (args.name, rid))
+            return
+        if args.action == "benchmark":
+            if getattr(args, "list_benchmarks", False) or args.path == "list":
+                rows = market_benchmarks(store, city=args.city)
+                if not rows:
+                    print("还没有报告口径：market benchmark add --role 产品经理 --p50 20000 --source 脉脉")
+                    return
+                for r in rows:
+                    print("%-10s %-6s P25 %-7s P50 %-7s P75 %-7s %s" % (
+                        r["role_name"], r.get("city") or "—", r.get("p25") or "—",
+                        r.get("p50") or "—", r.get("p75") or "—", r.get("source") or ""))
+                return
+            if not args.role_name or args.p50 is None:
+                raise SystemExit("缺 --role 或 --p50")
+            market_benchmark_add(
+                store, args.role_name, p25=args.p25, p50=args.p50, p75=args.p75,
+                city=args.bench_city or args.city or "", level=args.level or "",
+                source=args.source or "", source_url=args.source_url or "",
+                sample_size=args.sample_size, as_of=args.as_of or "", note=args.note or "")
+            print("✓ 已录入报告口径：%s" % args.role_name)
             return
         if args.action == "ingest":
             stats = market_ingest_cli(store, args.path, target_role=args.role)
@@ -1531,7 +1566,7 @@ def build_parser():
     p.set_defaults(func=_capability)
 
     p = sub.add_parser("market", help="就业市场样本：采集结果入库与汇总")
-    p.add_argument("action", choices=["ingest", "summary", "roles", "role-add"])
+    p.add_argument("action", choices=["ingest", "summary", "roles", "role-add", "benchmark"])
     p.add_argument("path", nargs="?", help="ingest：采集产出的 JSONL 文件")
     p.add_argument("--role", help="ingest：归属的目标岗位名称")
     p.add_argument("--city", help="summary：只看某个城市")
@@ -1539,7 +1574,25 @@ def build_parser():
     p.add_argument("--name", help="role-add：岗位名称")
     p.add_argument("--family", help="role-add：岗位族（product/design/engineering/qa/operations/management/other）")
     p.add_argument("--keywords", help="role-add：检索关键词，逗号分隔")
+    p.add_argument("--list", dest="list_benchmarks", action="store_true", help="benchmark：列出已录入的报告口径")
+    p.add_argument("--role-name", help="benchmark：岗位名称")
+    p.add_argument("--p25", type=int, help="benchmark：25 分位月薪")
+    p.add_argument("--p50", type=int, help="benchmark：中位月薪")
+    p.add_argument("--p75", type=int, help="benchmark：75 分位月薪")
+    p.add_argument("--bench-city", help="benchmark：城市")
+    p.add_argument("--level", help="benchmark：职级")
+    p.add_argument("--source", help="benchmark：报告来源")
+    p.add_argument("--source-url", help="benchmark：报告链接")
+    p.add_argument("--sample-size", type=int, help="benchmark：样本量")
+    p.add_argument("--as-of", help="benchmark：数据时间")
+    p.add_argument("--note", help="benchmark：备注")
     p.set_defaults(func=_market)
+
+    p = sub.add_parser("portable", help="整库带走：导出/导入一个 zip（含数据与配置，无账号）")
+    p.add_argument("action", choices=["export", "import"])
+    p.add_argument("path", help="导出目标 zip 或导入源 zip")
+    p.add_argument("--force", action="store_true", help="import：覆盖已有库")
+    p.set_defaults(func=_portable)
 
     p = sub.add_parser("link", help="把来源片段关联到任意档案记录")
     p.add_argument("entity")

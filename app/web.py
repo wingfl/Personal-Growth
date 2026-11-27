@@ -446,32 +446,35 @@ class Api:
         }
 
     def market(self, city=None):
-        """市场定位：平台样本的薪资带与高频要求，与本人当前薪资对照。"""
-        from .market import summary as market_summary
+        """市场定位：我在样本里的位置、分档要求频次、与高薪样本的能力差距。"""
+        from .market import analyze, summary as market_summary
         from .roles import playbook
-        data = market_summary(self.store, city=city)
         profile = self.profile()
         role = (profile.get("current_title") or "").strip()
         current = profile.get("current_salary")
         target = profile.get("expected_salary")
-        groups = []
-        for g in data["groups"]:
-            item = dict(g)
-            if current and g.get("salary_p50"):
-                item["vs_current_pct"] = round((g["salary_p50"] - current) * 100.0 / current, 1)
-            groups.append(item)
+        data = analyze(self.store, city=city, salary=current)
         return {
-            "generated_at": data["generated_at"],
+            "generated_at": _now(),
             "role": role,
             "city": city or (profile.get("city") or ""),
-            "cities": data["cities"],
-            "total_postings": data["total_postings"],
+            "cities": sorted({r.get("city") for r in self.store.list("job_posting", limit=5000) if r.get("city")}),
+            "total_postings": data["samples"],
             "current_salary": current,
             "expected_salary": target,
-            "groups": groups,
+            "salary_samples": data["salary_samples"],
+            "p25": data["p25"], "p50": data["p50"], "p75": data["p75"],
+            "percentile": data["percentile"],
+            "band": data["band"], "band_name": data["band_name"],
+            "next_band_at": data["next_band_at"], "to_next_band": data["to_next_band"],
+            "bands": data["bands"],
+            "groups": market_summary(self.store, city=city)["groups"],
+            "gaps": data["gaps"],
+            "recommendations": data["recommendations"],
+            "benchmarks": data["benchmarks"],
             "chain": playbook(role)[0] if role else None,
-            "caveat": "样本来自公开招聘列表（不含 JD 正文与候选人信息）；薪资为区间中值折算，"
-                      "不含年终奖口径差异，样本量小时仅供参考。",
+            "caveat": "样本来自公开招聘列表（多数不含 JD 正文）；薪资取区间中值，不含年终奖口径差异。"
+                      "「要求」由标题、标签、学历、经验折算，不等同于岗位硬门槛。",
         }
 
     def capability(self, capability_id):

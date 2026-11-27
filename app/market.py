@@ -122,6 +122,7 @@ def ingest(store, path, target_role=None, role_family=None):
                 "salary_months": months,
                 "experience": row.get("experience") or "",
                 "degree": row.get("degree") or "",
+                "jd_text": row.get("jd_text") or "",
                 "tags": row.get("tags") or [],
                 "industry": row.get("industry") or "",
                 "company_size": row.get("company_size") or "",
@@ -174,6 +175,212 @@ def _percentile(values, q):
     hi = min(lo + 1, len(nums) - 1)
     frac = pos - lo
     return int(round(nums[lo] * (1 - frac) + nums[hi] * frac))
+
+
+CAPABILITY_NAMES = {
+    "PU1": "用户洞察", "PU2": "产品设计", "PU3": "数据分析",
+    "DQ1": "项目推进", "DQ2": "质量与验收", "DQ3": "风险处理",
+    "CO1": "跨团队协作", "CO2": "沟通表达",
+    "CG1": "领域知识", "CG2": "复盘迁移",
+}
+
+# 要求词 → 能力：用于把岗位标题/标签/JD 正文折算成「这条岗位要什么能力」
+REQUIREMENT_RULES = (
+    ("PU3", ("数据分析", "数据驱动", "指标", "埋点", "abtest", "ab test", "报表", "漏斗", "sql")),
+    ("PU1", ("用户研究", "用户调研", "访谈", "洞察", "用户需求", "竞品")),
+    ("PU2", ("prd", "需求文档", "原型", "交互设计", "方案设计", "产品设计", "流程图", "需求分析")),
+    ("DQ1", ("项目管理", "排期", "推进", "跨部门", "协同", "落地", "跟进")),
+    ("DQ2", ("测试", "验收", "质量", "上线", "交付")),
+    ("DQ3", ("风险", "合规", "风控", "应急")),
+    ("CO1", ("跨团队", "协作", "对接", "沟通协调")),
+    ("CO2", ("沟通", "表达", "汇报", "演讲", "文档")),
+    ("CG1", ("行业", "领域知识", "ai", "大模型", "llm", "aigc", "算法", "商业化", "增长", "投放")),
+    ("CG2", ("复盘", "方法论", "沉淀", "总结")),
+)
+
+BAND_NAMES = {"low": "中位以下", "mid": "中位到 P75", "high": "P75 以上"}
+
+
+def requirements_of(row):
+    """从一条岗位样本抽取能力要求（不依赖 JD 正文，正文有则一起算）。"""
+    text = " ".join([
+        row.get("title") or "", row.get("jd_text") or "", row.get("keyword") or "",
+        " ".join(_as_list(row.get("tags"))), row.get("degree") or "", row.get("experience") or "",
+    ]).lower()
+    hits = []
+    for code, needles in REQUIREMENT_RULES:
+        for needle in needles:
+            if needle.isascii():
+                if re.search(r"(?<![a-z])%s(?![a-z])" % re.escape(needle), text):
+                    hits.append((code, needle))
+                    break
+            elif needle in text:
+                hits.append((code, needle))
+                break
+    return hits
+
+
+def _mid(row):
+    if row.get("salary_min") and row.get("salary_max"):
+        return (row["salary_min"] + row["salary_max"]) / 2.0
+    return None
+
+
+def _load(store, city=None):
+    where = {"city": city} if city else None
+    return store.list("job_posting", where=where, limit=5000)
+
+
+def _evidence_counts(store):
+    counts = {}
+    for row in store.list("capability", limit=100):
+        counts[row["code"]] = {"id": row["id"], "name": row["name"], "count": 0}
+    for ev in store.list("capability_evidence", limit=20000):
+        cap = ev.get("capability_id")
+        for code, info in counts.items():
+            if info["id"] == cap:
+                info["count"] += 1
+                break
+    return counts
+
+
+def analyze(store, city=None, salary=None):
+    """薪资位置 + 分档要求频次 + 与高薪样本的能力差距。"""
+    rows = _load(store, city)
+    mids = sorted([_mid(r) for r in rows if _mid(r)])
+    p25 = _percentile(mids, 0.25)
+    p50 = _percentile(mids, 0.50)
+    p75 = _percentile(mids, 0.75)
+
+    def band_of(value):
+        if not value or p50 is None:
+            return None
+        if value < p50:
+            return "low"
+        if value < p75:
+            return "mid"
+        return "high"
+
+    bands = {}
+    for row in rows:
+        mid = _mid(row)
+        key = band_of(mid)
+        if not key:
+            continue
+        bands.setdefault(key, []).append(row)
+
+    band_out = []
+    for key in ("low", "mid", "high"):
+        items = bands.get(key, [])
+        if not items:
+            continue
+        counter = {}
+        for row in items:
+            for code, needle in requirements_of(row):
+                counter[code] = counter.get(code, 0) + 1
+        top = sorted(counter.items(), key=lambda kv: -kv[1])[:6]
+        band_out.append({
+            "key": key,
+            "name": BAND_NAMES[key],
+            "postings": len(items),
+            "salary_from": {"low": None, "mid": p50, "high": p75}[key],
+            "salary_to": {"low": p50, "mid": p75, "high": None}[key],
+            "requirements": [
+                {"code": c, "name": CAPABILITY_NAMES.get(c, c), "count": n,
+                 "share": round(n * 100.0 / len(items), 1)}
+                for c, n in top
+            ],
+        })
+
+    evidence = _evidence_counts(store)
+    high = bands.get("high", [])
+    percentile = None
+    if salary and mids:
+        below = len([m for m in mids if m < salary])
+        percentile = round(below * 100.0 / len(mids), 1)
+
+    gaps = []
+    if high:
+        counter = {}
+        examples = {}
+        for row in high:
+            for code, needle in requirements_of(row):
+                counter[code] = counter.get(code, 0) + 1
+                examples.setdefault(code, [])
+                if row.get("title") not in examples[code]:
+                    examples[code].append(row.get("title"))
+        for code, n in counter.items():
+            share = n * 100.0 / len(high)
+            ev = evidence.get(code, {}).get("count", 0)
+            gaps.append({
+                "code": code,
+                "name": CAPABILITY_NAMES.get(code, code),
+                "high_count": n,
+                "high_share": round(share, 1),
+                "evidence": ev,
+                "examples": [t for t in examples.get(code, []) if t][:3],
+            })
+        # 高薪岗位提得多、我证据少的排前面
+        for item in gaps:
+            coverage = min(item["evidence"], 20) / 20.0
+            item["score"] = round(item["high_share"] * (1 - coverage), 1)
+        gaps.sort(key=lambda x: -x["score"])
+
+    my_band = band_of(salary)
+    next_at = None
+    if my_band == "low":
+        next_at = p50
+    elif my_band == "mid":
+        next_at = p75
+
+    return {
+        "samples": len(rows),
+        "salary_samples": len(mids),
+        "p25": p25, "p50": p50, "p75": p75,
+        "salary": salary,
+        "percentile": percentile,
+        "band": my_band,
+        "band_name": BAND_NAMES.get(my_band) if my_band else None,
+        "next_band_at": next_at,
+        "to_next_band": (next_at - salary) if (next_at and salary) else None,
+        "bands": band_out,
+        "gaps": gaps,
+        "recommendations": gaps[:2],
+        "benchmarks": benchmarks(store, city=city),
+    }
+
+
+def benchmark_add(store, role_name, p25=None, p50=None, p75=None, city="",
+                  level="", source="", source_url="", sample_size=None, as_of="", note=""):
+    """录入行业报告口径的薪资分位（不是爬虫样本，来自公开报告）。"""
+    row = {
+        "role_name": role_name, "role_family": role_family_for(role_name, role_name),
+        "city": city, "level": level,
+        "p25": p25, "p50": p50, "p75": p75,
+        "currency": "CNY", "period": "month",
+        "source": source, "source_url": source_url,
+        "sample_size": sample_size,
+        "as_of": as_of or datetime.now(timezone.utc).date().isoformat(), "note": note,
+    }
+    existing = store.find_one("salary_benchmark", role_name=role_name, city=city, source=source)
+    if existing:
+        store.update("salary_benchmark", existing["id"], row, actor_type="user", remark="报告口径更新")
+    else:
+        store.insert("salary_benchmark", row, actor_type="user", remark="报告口径录入")
+    store.commit()
+    return row
+
+
+def benchmarks(store, city=None):
+    rows = store.list("salary_benchmark", limit=200)
+    out = []
+    for row in rows:
+        if city and row.get("city") and row["city"] != city:
+            continue
+        out.append({k: row.get(k) for k in
+                    ("role_name", "city", "level", "p25", "p50", "p75", "period",
+                     "source", "source_url", "sample_size", "as_of", "note")})
+    return out
 
 
 def summary(store, city=None):

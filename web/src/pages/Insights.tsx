@@ -22,7 +22,7 @@ const RANGES = [
   { key: "52", label: "近一年" },
 ];
 
-export function Insights() {
+export function Rhythm() {
   const [range, setRange] = useState("26");
   const growth = useApi<GrowthPayload>("/api/growth?months=12");
   const caps = useApi<CapabilitiesPayload>("/api/capabilities");
@@ -179,13 +179,7 @@ export function Insights() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight">数据分析</h2>
-          <p className="mt-1 text-base text-muted-foreground">
-            能力证据按月统计；数据不足的模块显示空态
-          </p>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <div className="flex items-center gap-1 rounded-md border border-border bg-card p-0.5">
           {RANGES.map((item) => (
             <Button

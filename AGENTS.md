@@ -32,7 +32,7 @@ python tools\check_all.py                     # 质量闸门（9 步）
 | `app/` | 后端：store / archive / importers / extract / llm / capability / market / projects / roles / web / cli |
 | `schema/model.core.json` | **数据模型唯一来源**（实体、字段、枚举、规则、覆盖项） |
 | `schema/schema.sql`、`schema/parts/` | 由模型生成的 DDL 与按层的实体清单 |
-| `web/` | React + Vite + shadcn 风格组件 + ECharts，只读 |
+| `web/` | React + Vite + shadcn 风格组件 + ECharts，只读；5 个页面：首页/档案/能力画像/市场定位/复盘（设置收在右上角） |
 | `collector/` | 招聘网站采集器（Node + puppeteer-core，当前只有 51job 列表可用） |
 | `docs/` | 架构、模块接口、开发规范、UI 方案、市场闭环方案、代码索引 |
 | `tools/` | `build_model.py`、`check_all.py`、`index_code.py`、`migrate_db.py`、`launch_ui.py` |
@@ -62,6 +62,9 @@ python -m app.cli project intro --all             # 生成项目介绍
 python -m app.cli goal add "目标名" --type capability --start 2026-12-01 --end 2027-03-31
 python -m app.cli profile set --title 产品经理 --set
 python -m app.cli market ingest data/market/raw/2026W48/51job-杭州-2026-11-27.jsonl
+python -m app.cli market benchmark add --role-name 产品经理 --p50 20000 --source 脉脉高聘 --as-of 2026-06-01
+python -m app.cli portable export data/logs/档案.zip       # 整库带走
+python -m app.cli --db data/new.db portable import data/logs/档案.zip
 ```
 
 ## 文档索引

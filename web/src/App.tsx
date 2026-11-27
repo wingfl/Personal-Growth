@@ -1,12 +1,10 @@
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { Sidebar } from "./components/layout/Sidebar";
 import { Topbar } from "./components/layout/Topbar";
 import { Home } from "./pages/Home";
 import { Archive } from "./pages/Archive";
-import { Insights } from "./pages/Insights";
 import { Capabilities } from "./pages/Capabilities";
 import { Market } from "./pages/Market";
-import { Goals } from "./pages/Goals";
 import { Review } from "./pages/Review";
 import { Settings } from "./pages/Settings";
 
@@ -20,10 +18,10 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/archive" element={<Archive />} />
-            <Route path="/insights" element={<Insights />} />
+            <Route path="/insights" element={<Navigate to="/archive" replace />} />
             <Route path="/capabilities" element={<Capabilities />} />
             <Route path="/market" element={<Market />} />
-            <Route path="/goals" element={<Goals />} />
+            <Route path="/goals" element={<Navigate to="/review" replace />} />
             <Route path="/review" element={<Review />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Home />} />
