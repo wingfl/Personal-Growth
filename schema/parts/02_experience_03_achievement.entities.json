@@ -1,0 +1,790 @@
+{
+  "$comment": "02_experience 与 03_achievement 层业务字段补全：工作经历档案（6.3）、职业能力画像（6.4）、成果案例中心（6.7）。只补业务字段，不新增实体/枚举，不改 core 已有字段。",
+  "entities": [
+    {
+      "id": "project",
+      "fields": [
+        {
+          "n": "project_code",
+          "l": "项目代号",
+          "t": "string",
+          "idx": true,
+          "d": "内部简称或立项编号（如 XM-2024-018），用于列表快速识别与跨资料归并匹配；无正式编号时留空，不做唯一约束。"
+        },
+        {
+          "n": "external_refs",
+          "l": "外部单号与链接",
+          "t": "json",
+          "d": "外部系统标识数组，元素形如 {\"type\":\"需求单|工单|代码库|文档\",\"id\":\"...\",\"url\":\"...\"}，用于从档案一键回跳原系统核对事实。"
+        },
+        {
+          "n": "team_size",
+          "l": "参与人数",
+          "t": "integer",
+          "d": "项目团队总人数（人），不含外部协作方；用于评估项目规模与个人在团队中的位置，资料未给出时留空而非估算。",
+          "min": 1
+        },
+        {
+          "n": "milestones",
+          "l": "关键里程碑",
+          "t": "json",
+          "d": "里程碑数组，元素形如 {\"name\":\"一期上线\",\"date\":\"2024-06\",\"date_precision\":\"month\",\"status\":\"done\"}；用于展示项目阶段，补足只有起止时间的表达。"
+        },
+        {
+          "n": "tech_stack",
+          "l": "技术栈与业务关键词",
+          "t": "json",
+          "d": "技术栈与业务关键词字符串数组，供检索和材料生成时选词；分类标签仍走 tag / tag_link，不在此硬编码分类字符串。"
+        },
+        {
+          "n": "is_representative",
+          "l": "是否代表性经历",
+          "t": "boolean",
+          "req": true,
+          "def": "false",
+          "idx": true,
+          "d": "用户显式选定是否作为代表性项目经历；总览页与简历选材只读取该标记，使入选理由可解释、可撤销。"
+        },
+        {
+          "n": "merged_from_ids",
+          "l": "被归并档案",
+          "t": "json",
+          "d": "被并入本记录的重复项目 id 数组，用于归并后在界面说明历史；正式血缘仍以 entity_relation 的 merged_into 为准。"
+        },
+        {
+          "n": "consolidation_note",
+          "l": "归并判定说明",
+          "t": "text",
+          "d": "记录归并或拆分时的判定依据（名称、别名、时间重叠、来源片段）与人工确认情况，供后续复核与撤销归并。"
+        }
+      ],
+      "rules": [
+        "`is_representative = true` 时必须已填写 `importance_level` 与 `outcome_summary`，否则总览页无法解释它为什么是代表性项目。",
+        "`milestones` 中每个里程碑日期必须落在 `start_date` 与 `end_date` 之间；`end_date` 为空时以当前时间作为上界校验。",
+        "`merged_from_ids` 不得包含本记录自身，且被归并记录必须软删除保留，禁止物理删除。"
+      ],
+      "notes": [
+        "core 已有 `importance_level`（1~5 连续评分）与 `alias_names`；再增加 `is_representative` 是刻意把「评分」与「是否入选展示」分离，避免用户为了入选而抬高分数。",
+        "`alias_names` 无唯一性约束，同一别名可同时挂在多个项目上；归并判定必须结合 entity_relation 与来源片段，不能只做别名字符串相等匹配。"
+      ]
+    },
+    {
+      "id": "business_system",
+      "fields": [
+        {
+          "n": "system_code",
+          "l": "系统代号",
+          "t": "string",
+          "idx": true,
+          "d": "系统内部编号或英文简称，用于列表识别与跨资料匹配；无编号时留空，不做唯一约束。"
+        },
+        {
+          "n": "external_refs",
+          "l": "外部入口与链接",
+          "t": "json",
+          "d": "系统访问入口、文档库、代码库、监控面板等链接数组，用于核对系统事实与整理材料时引用。"
+        },
+        {
+          "n": "user_scale",
+          "l": "用户与业务规模",
+          "t": "json",
+          "d": "系统体量描述，形如 {\"user_count\":12000,\"unit\":\"人\",\"period\":\"2024-12\",\"note\":\"月活\"}；规模数字必须标注口径与统计时点。"
+        },
+        {
+          "n": "milestones",
+          "l": "关键里程碑",
+          "t": "json",
+          "d": "系统建设阶段数组（立项、一期上线、重构、下线等），元素含 name/date/date_precision/status，用于展示系统的阶段演进。"
+        },
+        {
+          "n": "tech_stack",
+          "l": "技术栈与业务关键词",
+          "t": "json",
+          "d": "技术栈与业务关键词字符串数组，供检索与能力证据关联时辅助匹配；分类标签统一走 tag / tag_link。"
+        },
+        {
+          "n": "is_representative",
+          "l": "是否代表性经历",
+          "t": "boolean",
+          "req": true,
+          "def": "false",
+          "idx": true,
+          "d": "用户标记该系统是否作为代表性经历对外展示，供总览与材料生成筛选，含义与 project.is_representative 一致。"
+        },
+        {
+          "n": "merged_from_ids",
+          "l": "被归并档案",
+          "t": "json",
+          "d": "被并入本记录的重复系统 id 数组，保证同一系统不重复建档（规则 G3），历史血缘以 entity_relation 为准。"
+        },
+        {
+          "n": "consolidation_note",
+          "l": "归并判定说明",
+          "t": "text",
+          "d": "记录系统归并或改名的判定依据与人工确认情况，例如「周报中的『订单中心 v2』确认为本系统二期」。"
+        }
+      ],
+      "rules": [
+        "`milestones` 中每个里程碑日期必须落在 `start_date` 与 `end_date` 之间；`end_date` 为空时以当前时间作为上界校验。",
+        "`user_scale` 为 json，其中数值必须带 `unit` 与统计时点，缺少口径的规模数字不得用于对外材料。",
+        "`merged_from_ids` 中的系统必须已软删除且其 `entity_relation` 存在 merged_into 指向本记录。"
+      ],
+      "notes": [
+        "core 的 `business_system.status` 复用 `project_status` 枚举（含 planning / launched 等），对系统而言这些取值语义偏项目化，建议后续登记独立的系统生命周期枚举；本次不新增枚举，仅在界面文案上按「建设中 / 运行中 / 维护中 / 已下线」映射。",
+        "系统与项目是多对多关系，core 已用 entity_relation 表达；本表不加 project_id 外键，避免与 G3 的关联策略冲突。"
+      ]
+    },
+    {
+      "id": "function_module",
+      "fields": [
+        {
+          "n": "module_code",
+          "l": "模块代号",
+          "t": "string",
+          "idx": true,
+          "d": "模块的英文简称或功能编号，用于跨资料匹配与接口/文档引用；无编号时留空。"
+        },
+        {
+          "n": "alias_names",
+          "l": "模块别名",
+          "t": "json",
+          "d": "模块历史叫法或俗称数组，用于跨周报月报归并匹配；core 未为模块提供别名字段，故在此补齐。"
+        },
+        {
+          "n": "external_refs",
+          "l": "外部链接",
+          "t": "json",
+          "d": "模块的需求文档、设计稿、代码目录、配置入口等链接数组，便于从模块档案回跳原始材料核对。"
+        },
+        {
+          "n": "scale_note",
+          "l": "模块规模说明",
+          "t": "text",
+          "d": "描述模块体量，如页面数、接口数、覆盖端、日均调用量级；用于区分「小需求改动」与「完整模块建设」。"
+        },
+        {
+          "n": "milestones",
+          "l": "关键里程碑",
+          "t": "json",
+          "d": "模块级阶段数组（设计定稿、首版上线、重构等），元素含 name/date/date_precision/status；支撑模块经历的阶段展示。"
+        },
+        {
+          "n": "tech_stack",
+          "l": "技术栈与业务关键词",
+          "t": "json",
+          "d": "模块涉及的技术栈与业务关键词数组，供检索与能力证据匹配；分类标签仍走 tag / tag_link。"
+        },
+        {
+          "n": "is_representative",
+          "l": "是否代表性经历",
+          "t": "boolean",
+          "req": true,
+          "def": "false",
+          "idx": true,
+          "d": "用户标记该模块是否作为代表性经历展示；含义与 project.is_representative 保持一致，便于统一筛选。"
+        },
+        {
+          "n": "merged_from_ids",
+          "l": "被归并档案",
+          "t": "json",
+          "d": "被合并进来的重复模块 id 数组；模块树调整或改名时保留历史标识，避免工作事项挂载丢失（规则 G3、J7）。"
+        }
+      ],
+      "rules": [
+        "`milestones` 中每个里程碑日期必须落在 `start_date` 与 `end_date` 之间；`end_date` 为空时以当前时间作为上界校验。",
+        "归并模块时工作事项的 `module_id` 必须一并改挂到存活模块，并在 `merged_from_ids` 与 audit_log 中留痕。"
+      ],
+      "notes": [
+        "core 的 `function_module` 没有 `alias_names`，而模块改名（如「订单管理」改「交易履约」）在周报里很常见；本 part 补齐该字段，AI 归并匹配时同样不能只靠别名相等。",
+        "模块与系统的归属是强外键（`system_id`），跨系统的同一功能不应建成同一模块；跨系统共性能力用 entity_relation 表达。"
+      ]
+    },
+    {
+      "id": "work_item",
+      "fields": [
+        {
+          "n": "effort_hours",
+          "l": "投入工时",
+          "t": "decimal",
+          "d": "该事项的个人实际投入工时（小时，保留 1 位小数），用于评估投入规模与工作负载分布；无法估算时留空，禁止按事项数量反推。",
+          "min": 0
+        },
+        {
+          "n": "deliverables",
+          "l": "产出物与交付件",
+          "t": "json",
+          "d": "交付物数组，元素形如 {\"name\":\"接口文档\",\"type\":\"document|code|release|report\",\"ref_id\":\"...\",\"url\":\"...\"}，用于说明事项的实际产出。"
+        },
+        {
+          "n": "complexity_basis",
+          "l": "复杂度依据",
+          "t": "text",
+          "d": "说明 `complexity_level` 为何是该等级（技术难度、不确定性、影响面、涉及方数量），使复杂度评分可复核而非主观打分。"
+        },
+        {
+          "n": "collaborators",
+          "l": "协作对象",
+          "t": "json",
+          "d": "协作方数组，以角色或团队表述（如「后端组」「业务方」「外部供应商」），避免写入他人姓名等个人信息。"
+        },
+        {
+          "n": "is_follow_up_needed",
+          "l": "是否需要跟进",
+          "t": "boolean",
+          "req": true,
+          "def": "false",
+          "idx": true,
+          "d": "标记该事项是否仍有后续动作（待上线、待复盘、待确认效果）；用于生成待办视图，不代表事项未完成。"
+        },
+        {
+          "n": "follow_up_note",
+          "l": "跟进说明",
+          "t": "text",
+          "d": "记录跟进内容与结论；跟进完成后保留原文作为闭环记录，不因状态置为 false 而清空。"
+        },
+        {
+          "n": "follow_up_at",
+          "l": "计划跟进时间",
+          "t": "date",
+          "d": "计划复查或跟进的日期；未约定具体日期时留空，不填入臆测时间（对应 date_precision 的精度要求）。"
+        }
+      ],
+      "rules": [
+        "`is_follow_up_needed = true` 时必须填写 `follow_up_note`；`follow_up_at` 若填写则不得早于 `occurred_at`。",
+        "`complexity_level` 非空时必须给出 `complexity_basis`，否则该复杂度按 AI 推断值展示（`origin` 为 ai_agent 时界面须标注为建议）。",
+        "`effort_hours` 填写时必须为正数；同一事项跨月重复出现时应通过 work_theme / theme_member 归并，而不是新建多条事项累加工时。"
+      ],
+      "notes": [
+        "core 的 `work_item` 没有耗时与交付物字段，事项只能表达「做了什么」而无法表达「投入多少、产出什么」；补充后 `is_routine` 的虚增抑制才有量化对照。",
+        "「同一项目跨月重复出现应关联而非新建」的判断结果不落在 work_item 上：work_item 保持最小事实单元一次一记，归并由 work_theme + theme_member 承担。"
+      ]
+    },
+    {
+      "id": "work_theme",
+      "fields": [
+        {
+          "n": "merge_similarity",
+          "l": "归并相似度",
+          "t": "decimal",
+          "d": "AI 计算的主题聚合相似度（0~1），仅在 `origin = ai_agent` 时有意义，供审核排序参考，不得作为结论强度展示。",
+          "min": 0,
+          "max": 1
+        },
+        {
+          "n": "merge_method",
+          "l": "归并判定方式",
+          "t": "text",
+          "d": "说明用什么依据把这些事项判为同一主题（项目名、系统、关键词共现、时间连续性），使归并结果可复核、可复现。"
+        },
+        {
+          "n": "merge_candidate_items",
+          "l": "待归并候选",
+          "t": "json",
+          "d": "候选事项数组，元素形如 {\"work_item_id\":\"...\",\"score\":0.82}，供审核界面展示 AI 建议归入本主题但尚未确认的事项。"
+        },
+        {
+          "n": "merge_rejected_items",
+          "l": "已否定归并",
+          "t": "json",
+          "d": "被用户否定的事项数组，元素含 work_item_id 与 reason；用于避免同一条被拒事项反复弹窗（规则 C3）。"
+        },
+        {
+          "n": "key_evidence_ids",
+          "l": "代表性事项",
+          "t": "json",
+          "d": "支撑该主题的关键 work_item id 数组，由用户挑选，用于主题详情页摘要与材料生成取例，不复制事项正文。"
+        }
+      ],
+      "rules": [
+        "`is_user_confirmed = false` 的主题 `review_status` 必须为 pending，且不得参与画像结论与材料生成。",
+        "`merge_similarity` 手工创建的主题必须留空；不得为人工主题补写相似度以使结果看起来客观。",
+        "`key_evidence_ids` 中的事项必须已通过 theme_member 归入本主题，禁止引用未归入的事项充当代表。"
+      ],
+      "notes": [
+        "core 的 `work_theme.status` 复用 `project_status` 枚举，但主题实际只需要「活跃 / 暂停 / 已结束」；`planning`、`launched` 等取值对主题无意义，建议后续登记独立的主题状态枚举。",
+        "相似度算法与阈值由 ai_job 的 prompt_template 版本决定，主题记录只保存结果与判定说明；算法升级后不回溯改写历史 `merge_similarity`。"
+      ]
+    },
+    {
+      "id": "theme_member",
+      "fields": [
+        {
+          "n": "similarity_score",
+          "l": "匹配相似度",
+          "t": "decimal",
+          "d": "该事项与本主题的匹配相似度（0~1）；AI 归并时写入，手工归入时留空，供人工按分值高低优先复核。",
+          "min": 0,
+          "max": 1
+        },
+        {
+          "n": "match_reason",
+          "l": "归入依据",
+          "t": "text",
+          "d": "逐条说明该事项因哪些名称、关键词、时间或项目归属被归入此主题，是人工复核与撤销归并的直接依据。"
+        },
+        {
+          "n": "added_by_job_id",
+          "l": "来源作业",
+          "t": "ref",
+          "ref": "ai_job",
+          "d": "产生该归属建议的 AI 作业 id，便于按作业批次回滚或复核归并结果；手工归入时留空。"
+        },
+        {
+          "n": "evidence_fragment_id",
+          "l": "判定片段",
+          "t": "ref",
+          "ref": "source_fragment",
+          "d": "支撑归并判定的原文片段（如两期周报中同时出现该主题的段落），用于一键跳回原始资料复核。"
+        }
+      ],
+      "rules": [
+        "同一 `theme_id` 与 `work_item_id` 组合唯一；重复归并必须合并为一条并保留依据，禁止产生重复成员行。",
+        "`is_user_confirmed = true` 时 `confirmed_at` 必须填写；`is_user_confirmed = false` 时 `confirmed_at` 必须为空。"
+      ],
+      "notes": [
+        "theme_member 的通用字段组只有 `origin`，缺少 `review_status` / `reviewed_at`；这是 AI 归并建议最需要审核状态的表，本 part 用 `is_user_confirmed` + `confirmed_at` 兜底，建议 core 为其补挂 review 字段组。",
+        "`relation_type` 只有 primary / secondary 两个取值，无法表达「曾经归入、后被移出」；移出记录通过软删除 + audit_log 保留，必要时用 entity_relation 补充血缘。"
+      ]
+    },
+    {
+      "id": "role_record",
+      "fields": [
+        {
+          "n": "contribution_evidence",
+          "l": "贡献佐证说明",
+          "t": "text",
+          "d": "说明该职责与实际贡献的依据（支撑的工作事项、成果案例或他人评价出处）；无佐证的贡献不得用于述职与晋升材料。"
+        },
+        {
+          "n": "role_change_reason",
+          "l": "角色变化原因",
+          "t": "text",
+          "d": "解释与上一条职责记录相比角色或职责范围为何变化（晋升、转岗、项目阶段切换、团队调整），支撑经历成长曲线的可解释性。"
+        },
+        {
+          "n": "is_ongoing",
+          "l": "是否仍在持续",
+          "t": "boolean",
+          "req": true,
+          "def": "false",
+          "idx": true,
+          "d": "该职责当前是否仍在承担；为 true 时 `end_date` 必须为空，避免出现「仍在持续却已填结束时间」的矛盾数据。"
+        },
+        {
+          "n": "previous_record_id",
+          "l": "上一条职责记录",
+          "t": "ref",
+          "ref": "role_record",
+          "d": "同一对象上的前一条职责记录，用于串成职责变化链；与 `role_change_reason` 配合说明变化过程。"
+        },
+        {
+          "n": "is_primary_role",
+          "l": "是否主职责",
+          "t": "boolean",
+          "req": true,
+          "def": "false",
+          "idx": true,
+          "d": "同一对象同一时间存在多条职责记录时，标记哪条是主职责；用于统计占用时间与展示主角色。"
+        },
+        {
+          "n": "target_label",
+          "l": "对象名称快照",
+          "t": "string",
+          "d": "职责对象（项目/系统/模块/主题/领域）在写入时的名称快照；对象改名或被归并后，职责历史仍能正确展示（规则 G3）。"
+        }
+      ],
+      "rules": [
+        "`is_ongoing = true` 时 `end_date` 必须为空；`is_ongoing = false` 时 `end_date` 必填且不得早于 `start_date`。",
+        "`previous_record_id` 不得指向自身，同一对象上的职责链不得成环。",
+        "`target_type` 与 `target_id` 由应用层保证引用有效（多态外键无数据库约束）；对象被软删除后职责记录保留并依赖 `target_label` 展示。"
+      ],
+      "notes": [
+        "core 的 `role_record` 用 `target_type` + `target_id` 多态引用，数据库层无法建立外键，因此对象改名或被归并后可能丢失可读性；`target_label` 是名称快照兜底，不是关联关系的替代。",
+        "`date_precision` 默认 month 合理：职责变化通常来自月报口径，界面不得把月度职责渲染成具体某一天。"
+      ]
+    },
+    {
+      "id": "achievement_case",
+      "fields": [
+        {
+          "n": "highlight",
+          "l": "亮点提炼",
+          "t": "text",
+          "d": "一句话亮点（动作 + 可验证结果），用于总览卡片与材料摘要；必须由 `result` / `achievement_metric` 支撑，不得出现未证实的形容词。"
+        },
+        {
+          "n": "applicable_scenarios",
+          "l": "适用场景",
+          "t": "json",
+          "d": "该案例适合使用的场景数组（如面试项目介绍、晋升答辩、内部复盘、对外分享），供材料中心按用途筛选素材。"
+        },
+        {
+          "n": "is_disclosable",
+          "l": "是否可对外披露",
+          "t": "boolean",
+          "req": true,
+          "def": "false",
+          "idx": true,
+          "d": "标记该案例是否可对外披露（简历、面试、对外分享）；为 false 时材料生成仅允许内部述职使用，与 is_resume_ready 含义不同。"
+        },
+        {
+          "n": "disclosure_note",
+          "l": "披露限制说明",
+          "t": "text",
+          "d": "写明披露限制与脱敏要求（客户名称、金额、系统数据需去除或替换）；`is_disclosable = false` 时必填。"
+        },
+        {
+          "n": "limitations",
+          "l": "局限与未验证部分",
+          "t": "text",
+          "d": "记录该成果中尚未验证、依赖他人或外部条件才成立的部分，防止材料生成时把推断写成事实。"
+        },
+        {
+          "n": "is_result_verified",
+          "l": "结果是否已核实",
+          "t": "boolean",
+          "req": true,
+          "def": "false",
+          "idx": true,
+          "d": "成果结果是否经用户或业务方核实；为 false 时案例可作为待补充素材保留，但不得进入对外材料。"
+        },
+        {
+          "n": "reuse_notes",
+          "l": "复用注意事项",
+          "t": "text",
+          "d": "复用该案例改写时需注意的口径问题（角色表述、指标口径、不可夸大的边界），供材料生成与人工改写参考。"
+        }
+      ],
+      "rules": [
+        "`is_disclosable = false` 时 `disclosure_note` 必填，说明脱敏要求或不可披露的原因。",
+        "`is_result_verified = false` 时 `is_resume_ready` 不得为 true，材料生成不得引用其 `result` 与 `highlight`。",
+        "`highlight` 中出现的任何数字必须能在该案例的 `achievement_metric` 或 `result` 中找到对应表述。"
+      ],
+      "notes": [
+        "core 已有 `is_resume_ready`（素材是否可直接复用）与 `experience_summary`（可复用经验），本 part 不重复定义；`is_disclosable` 解决的是「能不能对外说」，两者是不同维度的开关。",
+        "core 缺失「对外可披露级别」枚举（公开 / 脱敏 / 内部 / 机密）；本次用 `is_disclosable` + `disclosure_note` 表达，建议后续登记枚举以支持更细的合规拦截。",
+        "`limitations` 与 `experience_summary` 都涉及经验沉淀，但前者记录的是边界与风险，后者记录的是方法，不能相互替代。"
+      ]
+    },
+    {
+      "id": "achievement_metric",
+      "fields": [
+        {
+          "n": "stat_period_start",
+          "l": "统计周期起",
+          "t": "date",
+          "d": "该指标取数区间的起始日期；无明确区间时留空，禁止用成果发生时间顶替统计周期。"
+        },
+        {
+          "n": "stat_period_end",
+          "l": "统计周期止",
+          "t": "date",
+          "d": "该指标取数区间的结束日期；与 `stat_period_start` 共同说明「这个数字统计的是哪段时间」。"
+        },
+        {
+          "n": "data_source",
+          "l": "数据来源",
+          "t": "text",
+          "d": "指标的取数出处（系统报表名、工单系统、监控看板、业务方口头提供），并注明是否为估算；文本说明不能替代 provenance_link。"
+        },
+        {
+          "n": "verified_by",
+          "l": "核实人",
+          "t": "string",
+          "d": "核实该指标值的人或来源（用户本人、直属上级、业务方、系统报表自动导出）；`is_verified = true` 时必填。"
+        },
+        {
+          "n": "verified_at",
+          "l": "核实时间",
+          "t": "datetime",
+          "d": "完成核实的时间（UTC）；`is_verified = true` 时必填，用于判断指标口径是否仍然有效。"
+        },
+        {
+          "n": "baseline_period",
+          "l": "基线统计周期",
+          "t": "string",
+          "d": "对比基线所在周期（如「2024Q1 月均」「上线前 3 个月」），说明 `baseline_value` 是哪段时间的数值。"
+        },
+        {
+          "n": "baseline_type",
+          "l": "基线类型",
+          "t": "string",
+          "d": "说明对比方式：环比、同比、目标值或改造前基线；缺此说明时不得把两个不同口径的数字直接相减。"
+        },
+        {
+          "n": "is_estimate",
+          "l": "是否为估算值",
+          "t": "boolean",
+          "req": true,
+          "def": "false",
+          "idx": true,
+          "d": "标记指标是否来自估算或口头回忆；为 true 时即使 `is_verified` 也不得进入简历、晋升等对外材料。"
+        }
+      ],
+      "rules": [
+        "`stat_period_start` 不得晚于 `stat_period_end`；两者要么都填，要么都不填。",
+        "`is_verified = true` 时 `verified_by` 与 `verified_at` 必填；`is_estimate = true` 时 `is_verified` 不得为 true。",
+        "填写 `baseline_value` 时必须同时给出 `baseline_type`，避免把目标值与实际基线混用。"
+      ],
+      "notes": [
+        "core 规则 F1 要求 `measurement_method` 或来源片段二者至少其一；`data_source` 只是可读的出处说明，真正可追溯的来源仍必须通过 provenance_link 指向 source_fragment，二者不可互相顶替。",
+        "core 的 `baseline_value` 是字符串，可表达「从 2h 降到 40min」这类口语化对比；新增的结构化周期与类型字段只用于解释，不改变原始表述。"
+      ]
+    },
+    {
+      "id": "achievement_item_link",
+      "fields": [
+        {
+          "n": "link_reason",
+          "l": "关联依据",
+          "t": "text",
+          "d": "说明为何判定该事项支撑该成果（原文出处或归纳过程），使成果到事项的关联可复核，而不是凭印象挂接。"
+        },
+        {
+          "n": "similarity_score",
+          "l": "匹配相似度",
+          "t": "decimal",
+          "d": "AI 匹配该事项与成果的相似度（0~1），仅在建议由 AI 生成时写入，供人工按分值优先审核。",
+          "min": 0,
+          "max": 1
+        },
+        {
+          "n": "added_by_job_id",
+          "l": "来源作业",
+          "t": "ref",
+          "ref": "ai_job",
+          "d": "产生该关联建议的 AI 作业 id，便于按批次复核或回滚；用户手工关联时留空。"
+        },
+        {
+          "n": "contribution_weight",
+          "l": "贡献权重",
+          "t": "decimal",
+          "d": "该事项对成果的贡献占比（0~1，同一成果下各事项权重之和不超过 1），由用户填写，仅用于排序取例，不参与能力评分。",
+          "min": 0,
+          "max": 1
+        },
+        {
+          "n": "evidence_fragment_id",
+          "l": "佐证片段",
+          "t": "ref",
+          "ref": "source_fragment",
+          "d": "支撑该关联判定的原文片段，供详情页一键跳转到原始资料（规则 G4），人工关联时留空。"
+        }
+      ],
+      "rules": [
+        "同一 `achievement_id` 与 `work_item_id` 组合唯一；重复关联必须合并为一条并保留最新依据。",
+        "`contribution_weight` 填写时必须落在 0~1，且同一成果下所有关联的权重之和不得超过 1。",
+        "`relation_type = derived_from` 的关联至少保留一条，否则该成果没有可追溯的归纳来源。"
+      ],
+      "notes": [
+        "achievement_item_link 的通用字段组只有 `origin`，缺少 review 字段；AI 建议的关联与用户确认的关联因此无法用统一字段区分，本 part 用 `is_user_confirmed` 兜底，建议 core 为其补挂 review 字段组。",
+        "`contribution_weight` 是排序用的经验值而非统计结果，界面不得把它呈现成精确的量化贡献占比。"
+      ]
+    },
+    {
+      "id": "capability_evidence",
+      "fields": [
+        {
+          "n": "strength_basis",
+          "l": "强度判据",
+          "t": "text",
+          "d": "说明 `strength` 为何是该分值（工作复杂度、独立承担程度、影响范围、结果质量），使支撑强度可复核而非凭感觉打分。"
+        },
+        {
+          "n": "aspect_focus",
+          "l": "能力侧重面",
+          "t": "text",
+          "d": "该证据侧重体现能力的哪个方面（如架构设计、落地推进、跨方沟通、风险预判），用于区分同一能力下的不同表现。"
+        },
+        {
+          "n": "is_supplement_needed",
+          "l": "是否需要补充材料",
+          "t": "boolean",
+          "req": true,
+          "def": "false",
+          "idx": true,
+          "d": "标记该证据是否不足以单独支撑结论、需补充其他材料；为 true 的证据不得单独作为能力等级依据。"
+        },
+        {
+          "n": "supplement_note",
+          "l": "补充材料说明",
+          "t": "text",
+          "d": "写明缺什么证据、建议补充哪类材料（数据、他人评价、成果案例）；`is_supplement_needed = true` 时必填。"
+        },
+        {
+          "n": "confirmation_note",
+          "l": "确认与修正说明",
+          "t": "text",
+          "d": "用户确认或修正该证据时的补充说明；确认状态本身由 core 通用字段 `review_status` / `reviewed_at` 表达，不在此重复。"
+        },
+        {
+          "n": "counter_note",
+          "l": "反例说明",
+          "t": "text",
+          "d": "与该证据结论相悖的表现或情形，必须与支持证据同等保留、同等可见，避免只呈现有利证据（对应反例保留原则）。"
+        }
+      ],
+      "rules": [
+        "`is_supplement_needed = true` 时 `supplement_note` 必填，且该证据不得作为 `evidence_evaluation` 等级的唯一依据。",
+        "`strength` 非空时必须给出 `strength_basis`；`is_fact = false` 的证据其 `strength` 仅作参考，不得用于对外结论。"
+      ],
+      "notes": [
+        "core 的 `evidence_type`（职责/表现/复杂度/贡献）与 `evidence_evaluation.dimension_code`（复杂度/独立程度/责任范围/成果质量）在「复杂度、贡献」两项上语义重叠但粒度不同，报表口径必须区分「证据类型」与「评价维度」，不能合并统计。",
+        "core 的 `target_type` 使用 `evidence_target_type` 枚举（已为 enum 类型而非 ref），不含 achievement_metric；量化指标无法直接作为能力证据对象，需要时只能挂在 achievement_case 上。",
+        "用户确认状态直接复用 core 的 review 字段组，`confirmation_note` 只保存说明文本。"
+      ]
+    },
+    {
+      "id": "evidence_evaluation",
+      "fields": [
+        {
+          "n": "capability_id",
+          "l": "被评价能力",
+          "t": "ref",
+          "ref": "capability",
+          "idx": true,
+          "d": "本条评价所针对的能力；单条证据评价时可由 `evidence_id` 推导，表达能力整体等级时必须显式填写。"
+        },
+        {
+          "n": "is_aggregate",
+          "l": "是否整体等级",
+          "t": "boolean",
+          "req": true,
+          "def": "false",
+          "idx": true,
+          "d": "标记本条是「单条证据评价」还是「某能力在一段时间内的整体等级」，避免两种口径混在一张表里无法区分。"
+        },
+        {
+          "n": "period_start",
+          "l": "评价区间起",
+          "t": "date",
+          "d": "整体等级所覆盖时间区间的起始日期；`is_aggregate = false` 时留空，不得用 `evidence_id` 的发生时间顶替。"
+        },
+        {
+          "n": "period_end",
+          "l": "评价区间止",
+          "t": "date",
+          "d": "整体等级所覆盖时间区间的结束日期；与 `period_start` 共同说明「这个等级评价的是哪一段时间」。"
+        },
+        {
+          "n": "covered_evidence_ids",
+          "l": "纳入评价的证据",
+          "t": "json",
+          "imm": true,
+          "d": "生成该整体等级时纳入计算的 capability_evidence id 数组快照；写入后不可修改，保证历史等级可复现。"
+        },
+        {
+          "n": "data_coverage_note",
+          "l": "数据覆盖度说明",
+          "t": "text",
+          "d": "说明该区间证据是否充分、样本量与资料覆盖情况；样本不足时等级仅作参考，避免把资料变多误读为能力提升。"
+        },
+        {
+          "n": "is_stale",
+          "l": "是否需重新评价",
+          "t": "boolean",
+          "req": true,
+          "def": "false",
+          "idx": true,
+          "d": "所依赖证据被删除或降级时置为 true，界面必须隐藏或标注该等级，不得保留无证据支撑的历史结论（规则 D5）。"
+        },
+        {
+          "n": "supersedes_id",
+          "l": "取代的评价",
+          "t": "ref",
+          "ref": "evidence_evaluation",
+          "d": "本条评价取代的旧评价 id；旧记录保留但不再展示，形成可追溯的等级修订链。"
+        }
+      ],
+      "rules": [
+        "`is_aggregate = true` 时 `capability_id`、`period_start`、`period_end`、`covered_evidence_ids` 必填，且 `basis_text` 必须写明聚合口径（纳入哪些证据、如何取等级）。",
+        "`is_aggregate = false` 时 `period_start`、`period_end`、`covered_evidence_ids` 必须留空，`capability_id` 应与 `evidence_id` 指向证据的 `capability_id` 一致。",
+        "`period_start` 不得晚于 `period_end`；`supersedes_id` 不得指向自身且不得成环。",
+        "`is_stale = true` 的评价不得参与能力概览、成长曲线与材料生成。"
+      ],
+      "notes": [
+        "【取舍】core 的 `evidence_id` 是必填外键（规则 D3 也要求每条评价必须有被评价证据），因此「同一能力在一段时间内的整体等级」无法用一条纯聚合记录表达。本 part 的处理是：整体等级仍挂在一条代表性证据上，聚合范围由 `capability_id` + `period_start/period_end` + `covered_evidence_ids` + `is_aggregate` 显式声明，并在 `basis_text` 说明取舍。",
+        "【建议】更干净的做法是允许 `evidence_id` 可空，或新增 `capability_evaluation`（能力级评价）实体承载整体等级；本次不新增实体，故登记于此由 design 决定。",
+        "整体等级的 `evaluated_by` 为 ai 时必须经用户确认（review_status 从 pending 转 confirmed）才生效，避免 AI 直接产出能力结论。"
+      ]
+    },
+    {
+      "id": "evaluation_dimension",
+      "fields": [
+        {
+          "n": "applies_to",
+          "l": "适用能力范围",
+          "t": "json",
+          "d": "该维度适用的能力范围（capability_category id 或 capability code 数组）；为空表示全部能力通用，避免把所有维度机械套用到所有能力上。"
+        },
+        {
+          "n": "scoring_guidance",
+          "l": "打分指引",
+          "t": "text",
+          "d": "同一等级在不同能力上的判读要点与常见误区说明，减少不同时间、不同评价人造成的口径漂移。"
+        },
+        {
+          "n": "is_active",
+          "l": "是否启用",
+          "t": "boolean",
+          "req": true,
+          "def": "true",
+          "idx": true,
+          "d": "维度是否参与新增评价；停用后历史评价保留并仍可解释，但不得再新增该维度的评价记录。"
+        },
+        {
+          "n": "source_reference",
+          "l": "维度依据来源",
+          "t": "text",
+          "d": "该维度划分的依据出处（外部能力模型、行业标准或内部共识文档），便于解释为什么用这四个维度而不是主观自定义。"
+        }
+      ],
+      "rules": [
+        "`is_active = false` 的维度不得新增 `evidence_evaluation`；历史评价保留并在界面标注为「已停用维度的历史口径」。",
+        "`code` 取值必须来自 `evaluation_dimension` 枚举，`sort_order` 决定四维度在评价界面的固定顺序。"
+      ],
+      "notes": [
+        "core 已用 `sort_order` 固定展示顺序；`applies_to` 与 `scoring_guidance` 用于解决「同一维度在不同能力上标准不同」导致的口径漂移问题。"
+      ]
+    },
+    {
+      "id": "evaluation_level",
+      "fields": [
+        {
+          "n": "examples",
+          "l": "典型表现示例",
+          "t": "json",
+          "d": "达到该等级的典型表现示例数组，来自真实工作场景（脱敏后的匿名描述），用于让用户与 AI 对齐同一等级的理解。"
+        },
+        {
+          "n": "counter_examples",
+          "l": "不属于该等级的表现",
+          "t": "json",
+          "d": "容易被误判为该等级、但实际不足的典型表现数组，用于抑制等级上调，与 `examples` 成对维护。"
+        },
+        {
+          "n": "is_active",
+          "l": "是否启用",
+          "t": "boolean",
+          "req": true,
+          "def": "true",
+          "idx": true,
+          "d": "该等级标准是否当前生效；停用后不得用于新评价，历史评价按当时标准解释。"
+        },
+        {
+          "n": "effective_from",
+          "l": "标准生效时间",
+          "t": "date",
+          "d": "该等级标准开始生效的日期；标准修订后按时间点解释历史评价，避免用新标准回改旧结论。"
+        }
+      ],
+      "rules": [
+        "同一 `dimension_code` 下 `level_value` 组合唯一，且 `level_value` 必须落在 1~5。",
+        "`effective_from` 之后产生的 `evidence_evaluation` 必须按该时点生效的标准版本解释；修订标准不得回写已有评价。"
+      ],
+      "notes": [
+        "core 的 `evaluation_level` 没有版本与生效时间字段，标准一旦修改就无法解释历史评价是按哪一版标准给出的；`effective_from` + `is_active` 是轻量兜底，完整的标准版本链需要新增实体或版本号字段。"
+      ]
+    }
+  ]
+}

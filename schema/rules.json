@@ -1,0 +1,705 @@
+{
+  "version": "1.0",
+  "note": "数据驱动校验规则。refs 使用 `实体` 或 `实体.字段`，由 tools/build_model.py 渲染进设计文档；实现阶段可据此生成应用层校验与数据库约束。",
+  "groups": [
+    {
+      "id": "A",
+      "title": "A 原始资料不可变更（对应设计原则 ①）",
+      "rules": [
+        {
+          "id": "A1",
+          "text": "`source_document` 与 `source_fragment` 的正文、片段文本、字符区间、内容哈希在写入后不可被任何角色（含 AI、含管理员）修改，数据库层用触发器或不可变表实现；修正只能通过新增一份资料并标注取代关系。",
+          "refs": [
+            "source_document",
+            "source_fragment",
+            "source_document.raw_text",
+            "source_fragment.text",
+            "source_fragment.char_start",
+            "source_fragment.char_end",
+            "source_document.content_hash"
+          ]
+        },
+        {
+          "id": "A2",
+          "text": "原始资料只允许变更处理态与归档信息，允许变更的字段白名单：`source_document.processing_status`、`source_document.summary`、`source_document.word_count`、`source_document.attachment_id`、`source_document.import_batch_id`、`source_document.deleted_at`。",
+          "refs": [
+            "source_document.processing_status",
+            "source_document.summary",
+            "source_document.word_count",
+            "source_document.attachment_id",
+            "source_document.import_batch_id",
+            "source_document.deleted_at"
+          ]
+        },
+        {
+          "id": "A3",
+          "text": "同一来源渠道下 `source_document.content_hash` 重复时判定为重复导入，必须提示用户选择「跳过 / 作为新版本 / 仍要导入」，不得静默产生第二份完全相同的原始资料，所选处理方式写入 `source_document.duplicate_handling` 以便复盘。",
+          "refs": [
+            "source_document.content_hash",
+            "source_document.source_channel",
+            "source_document.duplicate_handling",
+            "import_batch"
+          ]
+        },
+        {
+          "id": "A4",
+          "text": "`source_fragment` 必须属于同一 `source_document`，且片段字符区间不得越界、同一文档内 `order_index` 唯一、相邻片段不重叠。",
+          "refs": [
+            "source_fragment.document_id",
+            "source_fragment.order_index",
+            "source_fragment.char_start",
+            "source_fragment.char_end"
+          ]
+        },
+        {
+          "id": "A5",
+          "text": "整理结果（工作事项、成果案例、能力证据等）与原始资料物理分离存放：整理结果只允许通过 `provenance_link` 引用片段，禁止把原文整段复制进整理结果字段。",
+          "refs": [
+            "provenance_link",
+            "source_fragment"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "B",
+      "title": "B 事实 / 推断 / 评价分离（对应设计原则 ⑤⑥、8.4）",
+      "rules": [
+        {
+          "id": "B1",
+          "text": "每条记录通过 `origin` 声明产生方式：`user` 用户手工录入、`import` 外部导入、`ai_agent` 由 AI 产生、`system` 系统计算。`ai_agent` 的记录还需用 `is_fact` 等字段进一步区分「自原文提取」与「推断」，不能只凭 `origin` 判定。",
+          "refs": [
+            "origin",
+            "review_status",
+            "provenance_link"
+          ]
+        },
+        {
+          "id": "B2",
+          "text": "声称来自原文的 AI 记录必须至少存在一条指向 `source_fragment` 且 `relation_type = primary_source` 的 `provenance_link`，否则校验失败；纯 AI 归纳得出的内容不建 `provenance_link`（没有可指认的片段），改用 `origin = ai_agent` + `is_fact = 0` 标记为推断并要求用户确认；若片段存在但结论属归纳，`relation_type` 取 `inferred`（枚举已登记），用户可一键否定。",
+          "refs": [
+            "origin",
+            "provenance_link",
+            "provenance_link.relation_type",
+            "source_fragment",
+            "provenance_relation"
+          ]
+        },
+        {
+          "id": "B3",
+          "text": "界面与导出必须按 `origin` 与 `review_status` 做视觉区分，禁止把 AI 推断以客观事实的呈现方式展示；`capability_evidence.is_fact = 0` 的证据不得作为能力等级的唯一依据。",
+          "refs": [
+            "origin",
+            "review_status",
+            "capability_evidence.is_fact"
+          ]
+        },
+        {
+          "id": "B4",
+          "text": "任何评分、等级、趋势、统计值必须可回溯到具体记录集合与计算规则，禁止写入人工编造的分数；`evidence_evaluation` 必须记录 `evaluated_by` 与判断依据 `basis_text`。",
+          "refs": [
+            "evidence_evaluation",
+            "evidence_evaluation.evaluated_by",
+            "evidence_evaluation.basis_text"
+          ]
+        },
+        {
+          "id": "B5",
+          "text": "`self_assessment` 与 AI 分析结果分区存放，用 `assessment_source` 标明来源；二者不得写入同一字段而靠文案区分。",
+          "refs": [
+            "self_assessment",
+            "self_assessment.assessment_source",
+            "growth_snapshot.analysis_note"
+          ]
+        },
+        {
+          "id": "B6",
+          "text": "凡挂 `fact` 字段组的内容型实体（事项、项目、系统、模块、主题、成果案例、量化指标、能力证据、个人特征、成长阶段），必须用 `is_fact` 标明该条内容是原文事实还是含 AI 推断：`is_fact = 0` 时必须填写 `fact_basis` 说明推断依据，界面与导出中不得把它当作事实陈述；事实、推断、评价不得写进同一个字段。",
+          "refs": [
+            "work_item.is_fact",
+            "work_item.fact_basis",
+            "project.is_fact",
+            "achievement_case.is_fact",
+            "achievement_metric.is_fact",
+            "capability_evidence.is_fact",
+            "capability_evidence.fact_basis",
+            "personal_trait.is_fact",
+            "growth_stage.is_fact"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "C",
+      "title": "C AI 只提建议、用户确认才生效（对应设计原则 ④、6.9）",
+      "rules": [
+        {
+          "id": "C1",
+          "text": "AI 对正式档案的任何写入必须先形成 `change_proposal`，禁止直接 UPDATE/DELETE 正式档案表；`ai_job` 只允许写 `change_proposal`、`proposal_evidence`、`source_document.processing_status` 与 `growth_snapshot`（快照需标注 `analysis_note` 为非正式结论）。`material` 是材料生成产物而非档案本身，允许 `ai_job` 直接写入，但必须以 `status = draft` 落库，经用户确认后才可进入 `confirmed` 与导出。",
+          "refs": [
+            "change_proposal",
+            "ai_job",
+            "proposal_evidence",
+            "source_document.processing_status",
+            "growth_snapshot",
+            "growth_snapshot.analysis_note",
+            "material",
+            "material.status"
+          ]
+        },
+        {
+          "id": "C2",
+          "text": "`change_proposal.status` 流转固定为 `pending → confirmed / modified / rejected / superseded`，另有 `expired` 表示因目标数据已变化而失效；终态不可回退，`confirmed` 与 `modified` 必须记录 `applied_entity_id` 并写 `audit_log`。",
+          "refs": [
+            "change_proposal.status",
+            "change_proposal.applied_entity_id",
+            "audit_log"
+          ]
+        },
+        {
+          "id": "C3",
+          "text": "确认时允许三种动作：原样接受、修改后接受（`proposed_payload` 被用户编辑，需保留 `base_payload` 以还原 AI 原始建议与用户改动的差异）、拒绝并记录理由；拒绝的建议不得再次以相同内容重复弹出。",
+          "refs": [
+            "change_proposal.proposed_payload",
+            "change_proposal.base_payload",
+            "change_proposal.diff_summary",
+            "change_proposal.reason",
+            "change_proposal.status"
+          ]
+        },
+        {
+          "id": "C4",
+          "text": "每条 `change_proposal` 必须携带 `proposal_evidence` 指向来源片段或既有记录；无证据的建议除「补全字段」类外一律不予展示。",
+          "refs": [
+            "change_proposal",
+            "proposal_evidence"
+          ]
+        },
+        {
+          "id": "C5",
+          "text": "同一目标实体上存在未处理建议时，新的建议按 `superseded` 处理，避免用户在过期的 `base_payload` 上做决定；应用建议前必须校验目标实体 `revision` 与建建议时一致，不一致则回退为需重新生成。",
+          "refs": [
+            "change_proposal.base_payload",
+            "change_proposal.status",
+            "revision"
+          ]
+        },
+        {
+          "id": "C6",
+          "text": "`agent_credential` 只存凭证哈希/引用与权限范围，禁止落库明文密钥；其 `scopes` 决定该 Agent 可读写的实体集合，默认只读 + 提建议。",
+          "refs": [
+            "agent_credential",
+            "agent_credential.scopes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D",
+      "title": "D 能力判断必须有证据（对应设计原则 ⑥、6.4）",
+      "rules": [
+        {
+          "id": "D1",
+          "text": "`capability_evidence` 的 `capability_id` 与证据指向对象（`target_type` + `target_id`）均不可为空：没有工作证据的能力结论不允许存在于档案中。",
+          "refs": [
+            "capability_evidence.capability_id",
+            "capability_evidence.target_type",
+            "capability_evidence.target_id"
+          ]
+        },
+        {
+          "id": "D2",
+          "text": "多项证据支撑同一能力时，通过 `evidence_evaluation` 在四个维度（复杂度、独立程度、责任范围、成果质量）上形成评价，禁止用「事项数量」直接换算能力等级。",
+          "refs": [
+            "evidence_evaluation",
+            "evaluation_dimension",
+            "evaluation_level"
+          ]
+        },
+        {
+          "id": "D3",
+          "text": "`evidence_evaluation` 必须给出维度 `dimension_code`、等级 `level_value` 与依据说明 `basis_text`，两种口径二选一：单条证据级评价必填 `evidence_id`；能力级整体评价（`is_aggregate = true`）填 `capability_id` 与 `covered_evidence_ids` 且 `evidence_id` 可为空。缺依据的评价视为无效数据并在界面隐藏。",
+          "refs": [
+            "evidence_evaluation.evidence_id",
+            "evidence_evaluation.capability_id",
+            "evidence_evaluation.is_aggregate",
+            "evidence_evaluation.covered_evidence_ids",
+            "evidence_evaluation.dimension_code",
+            "evidence_evaluation.level_value",
+            "evidence_evaluation.basis_text"
+          ]
+        },
+        {
+          "id": "D4",
+          "text": "`capability` 词典条目的 `evaluation_reference` 说明该能力「达到什么算强」，是评价的判据；该字段为空的能力不允许被用于生成能力结论。",
+          "refs": [
+            "capability.evaluation_reference",
+            "capability.status"
+          ]
+        },
+        {
+          "id": "D5",
+          "text": "能力证据被删除或降级时，依赖它的评价必须标记为需重新评估，不得保留无证据支撑的历史等级。",
+          "refs": [
+            "capability_evidence",
+            "evidence_evaluation"
+          ]
+        },
+        {
+          "id": "D6",
+          "text": "能力证据允许指向量化指标 `achievement_metric`（量化结果同样能证明能力），但该指标必须 `is_verified = 1`；能力级整体评价必须列出 `covered_evidence_ids`，没有证据集合的「整体评分」不得写入档案。",
+          "refs": [
+            "evidence_target_type",
+            "achievement_metric.is_verified",
+            "evidence_evaluation.covered_evidence_ids",
+            "evidence_evaluation.capability_id"
+          ]
+        },
+        {
+          "id": "D7",
+          "text": "同一能力在同一评价维度、同一统计周期上只允许一条有效的整体评价：`is_aggregate = true` 的记录必须按 `capability_id` + `dimension_code` + `period_start` 去重，由应用层在写入前校验。数据库层因能力级记录的 `evidence_id` 为空，普通唯一约束无法拦截（SQL 中 NULL 互不相等），PostgreSQL 等支持部分索引的库应补 `CREATE UNIQUE INDEX ... WHERE evidence_id IS NULL`；单条证据级评价仍由组合唯一约束 `(evidence_id, dimension_code)` 保证不重复。",
+          "refs": [
+            "evidence_evaluation.capability_id",
+            "evidence_evaluation.dimension_code",
+            "evidence_evaluation.period_start",
+            "evidence_evaluation.is_aggregate",
+            "evidence_evaluation.evidence_id"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "E",
+      "title": "E 个人特征与反例（对应 6.5 与设计原则 ⑦）",
+      "rules": [
+        {
+          "id": "E1",
+          "text": "`personal_trait` 不另立状态字段，直接复用通用审核状态 `review_status`：`pending` 候选、`confirmed` 已确认、`rejected` 已否定、`superseded` 已废弃；AI 提出的特征初始为 `pending`，用户确认后才进入画像展示。",
+          "refs": [
+            "personal_trait.review_status",
+            "review_status",
+            "personal_trait"
+          ]
+        },
+        {
+          "id": "E2",
+          "text": "反例（`trait_evidence.direction = counter`）必须与支持证据同等保留、同等可见；`personal_trait.counter_count` 与 `support_count` 同时展示，禁止只呈现支持证据。",
+          "refs": [
+            "trait_evidence.direction",
+            "personal_trait.counter_count",
+            "personal_trait.support_count"
+          ]
+        },
+        {
+          "id": "E3",
+          "text": "特征的 `polarity`（优势/待发展/中性）代表对成长的影响方向，不代表好坏评价；界面文案不得把「待发展」写成缺点标签。",
+          "refs": [
+            "personal_trait.polarity",
+            "trait_polarity"
+          ]
+        },
+        {
+          "id": "E4",
+          "text": "用户否定某特征时写入 `review_status = rejected` 并把理由落 `audit_log`，该特征不再出现在画像与材料生成上下文中，但保留历史以备复盘。",
+          "refs": [
+            "personal_trait.review_status",
+            "personal_trait",
+            "audit_log"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F",
+      "title": "F 成果与量化数据（对应 6.7、8.4）",
+      "rules": [
+        {
+          "id": "F1",
+          "text": "`achievement_metric` 必须至少填写 `measurement_method`（怎么算出来的）或指向证据来源之一，二者皆空的量化指标不得进入任何对外材料。",
+          "refs": [
+            "achievement_metric.measurement_method",
+            "achievement_metric.is_verified"
+          ]
+        },
+        {
+          "id": "F2",
+          "text": "`achievement_metric.is_verified` 表示指标是否经过核实；`is_verified = 0` 的指标在简历、述职、晋升材料中禁用，可通过 `material_citation` 校验拦截。",
+          "refs": [
+            "achievement_metric.is_verified",
+            "material_citation",
+            "material.material_type"
+          ]
+        },
+        {
+          "id": "F3",
+          "text": "成果案例必须区分个人贡献与团队成果：`achievement_case.personal_contribution` 与 `achievement_case.team_contribution` 分字段存放，`my_role` 标明主导/负责/参与/协助。",
+          "refs": [
+            "achievement_case.personal_contribution",
+            "achievement_case.team_contribution",
+            "achievement_case.my_role"
+          ]
+        },
+        {
+          "id": "F4",
+          "text": "成果案例与工作事项通过 `achievement_item_link` 多对多关联，`relation_type` 取 `derived_from`（成果由该事项提炼）或 `evidence`（该事项作为成果的佐证），避免复制事项内容形成两份事实。",
+          "refs": [
+            "achievement_item_link",
+            "achievement_item_link.relation_type",
+            "work_item"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "G",
+      "title": "G 来源追溯完整性（对应设计原则 ③、6.9）",
+      "rules": [
+        {
+          "id": "G1",
+          "text": "任何整理结果中的关键字段（事项内容、成果描述、指标值、能力证据陈述、特征判断）应至少有一条 `provenance_link`，或显式标注为「用户直接录入、无原文来源」。",
+          "refs": [
+            "provenance_link",
+            "provenance_link.field_name",
+            "provenance_link.fragment_id"
+          ]
+        },
+        {
+          "id": "G2",
+          "text": "`provenance_link` 采用多态引用（`entity_type` + `entity_id` + 可选 `field_name`），覆盖全部实体；删除片段前必须校验无反向引用，或提示用户确认连带影响。",
+          "refs": [
+            "provenance_link.entity_type",
+            "provenance_link.entity_id",
+            "provenance_link.field_name"
+          ]
+        },
+        {
+          "id": "G3",
+          "text": "跨资料的同一事物（项目、系统、模块、主题）用 `entity_relation` 建立关联，禁止为同一事物重复建档；归并操作必须保留被归并方的标识与历史。",
+          "refs": [
+            "entity_relation",
+            "entity_relation.relation_type",
+            "work_theme",
+            "theme_member"
+          ]
+        },
+        {
+          "id": "G4",
+          "text": "详情页必须能一键跳转到原始片段（资料 → 定位到段落），这是可追溯性的验收标准。",
+          "refs": [
+            "source_fragment",
+            "provenance_link"
+          ]
+        },
+        {
+          "id": "G5",
+          "text": "`capability_evidence.evidence_type`（证据类型：职责/表现/复杂度/贡献）与 `evidence_evaluation.dimension_code`（评价维度）粒度不同、来源不同，不可合并统计；任何报表与图表必须显式标明使用哪一种口径，避免同一批证据被双重计数。",
+          "refs": [
+            "capability_evidence.evidence_type",
+            "evidence_evaluation.dimension_code",
+            "evaluation_dimension"
+          ]
+        },
+        {
+          "id": "G6",
+          "text": "材料引用必须同时给出引用方式 `citation_type` 与被引用对象类型 `cited_entity_type`：前者说明这段文字是原文引用、改写还是由多条记录派生，后者说明引用的是哪类对象；两者语义不同，不得互相替代。`citation_type = derived` 的段落不得计入「逐条可回溯原文」的统计口径。",
+          "refs": [
+            "material_citation.citation_type",
+            "material_citation.cited_entity_type",
+            "material_citation.cited_entity_id",
+            "material_citation.paragraph_index"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H",
+      "title": "H 材料生成与版本（对应 6.8、设计原则 ⑧）",
+      "rules": [
+        {
+          "id": "H1",
+          "text": "`material` 生成时禁止引入未在档案中证实的内容：仅允许使用 `review_status = confirmed` 且带来源的记录；生成结果必须写入 `material_citation` 记录每段出处。",
+          "refs": [
+            "material",
+            "material_citation",
+            "review_status"
+          ]
+        },
+        {
+          "id": "H2",
+          "text": "`material` 采用版本链（`version_no` + `parent_material_id`），每次生成产生新版本而非覆盖；用户编辑后的内容标记为人工修订，重新生成不得静默覆盖用户改动。",
+          "refs": [
+            "material.version_no",
+            "material.parent_material_id",
+            "material.status"
+          ]
+        },
+        {
+          "id": "H3",
+          "text": "材料必须支持导出与迁移，导出内容包含正文与引用来源清单，格式至少覆盖 Markdown 与 Word/PDF。",
+          "refs": [
+            "material",
+            "material_citation"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I",
+      "title": "I 成长趋势的可解释性（对应 6.6）",
+      "rules": [
+        {
+          "id": "I1",
+          "text": "`growth_snapshot` 必须同时保存 `metrics`（数值）与 `data_coverage`（该时点的资料覆盖情况与样本量），否则「资料变多」会被误读为「能力提升」。",
+          "refs": [
+            "growth_snapshot.metrics",
+            "growth_snapshot.data_coverage"
+          ]
+        },
+        {
+          "id": "I2",
+          "text": "成长曲线必须可下钻到支撑数据点；界面必须区分「记录数量增长」与「能力维度评价变化」两类曲线，不可合并呈现。",
+          "refs": [
+            "growth_snapshot",
+            "evidence_evaluation",
+            "capability_evidence"
+          ]
+        },
+        {
+          "id": "I3",
+          "text": "`growth_snapshot` 为时点快照：`snapshot_at` / `metrics` / `data_coverage` 标记为写入后不可修改（`imm`），`scope_type` 标明快照范围；修正历史结论只能通过新增快照实现。",
+          "refs": [
+            "growth_snapshot.scope_type",
+            "growth_snapshot.snapshot_at",
+            "growth_snapshot.metrics",
+            "growth_snapshot.data_coverage",
+            "growth_snapshot"
+          ]
+        },
+        {
+          "id": "I4",
+          "text": "生成快照的 AI 作业必须记录 `ai_job` 并可回溯输入范围（用了哪些资料、哪段时间），使曲线上任一点都能回答「这份结论基于什么算出」。",
+          "refs": [
+            "growth_snapshot",
+            "ai_job",
+            "growth_snapshot.data_coverage"
+          ]
+        },
+        {
+          "id": "I5",
+          "text": "`growth_snapshot.metric_definitions` 必须覆盖 `metrics` 中出现的每一个指标，逐项写明名称、单位、计算口径与统计时间范围；没有口径定义的指标不得在界面或材料中展示，避免出现无法解释的数字与趋势。",
+          "refs": [
+            "growth_snapshot.metric_definitions",
+            "growth_snapshot.metrics"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "J",
+      "title": "J 通用数据完整性",
+      "rules": [
+        {
+          "id": "J1",
+          "text": "所有实体主键为 UUID（建议 v7 以利时间局部性）；`created_at` / `updated_at` 统一 UTC 存储，展示时按用户时区换算。",
+          "refs": [
+            "created_at",
+            "updated_at"
+          ]
+        },
+        {
+          "id": "J2",
+          "text": "所有删除为软删除（写 `deleted_at`），`deleted_at` 非空的记录不参与分析、统计与材料生成，但保留以便恢复与审计。",
+          "refs": [
+            "deleted_at",
+            "revision"
+          ]
+        },
+        {
+          "id": "J3",
+          "text": "并发编辑用 `revision` 乐观锁：提交时 revision 必须与读取时一致，冲突则拒绝并提示。",
+          "refs": [
+            "revision"
+          ]
+        },
+        {
+          "id": "J4",
+          "text": "所有正式档案的写操作必须落 `audit_log`（含 `entity_type` / `entity_id` / `action` / 变更前后快照 / 操作者类型 / 关联建议或作业），审计日志只增不改不删。",
+          "refs": [
+            "audit_log",
+            "audit_log.before_payload",
+            "audit_log.after_payload",
+            "audit_log.actor_type",
+            "audit_log.proposal_id",
+            "audit_log.job_id"
+          ]
+        },
+        {
+          "id": "J5",
+          "text": "枚举字段一律受 `enums` 定义约束，禁止写自由文本；需要扩展取值时必须显式登记枚举，旧值保留兼容。",
+          "refs": [
+            "enums"
+          ]
+        },
+        {
+          "id": "J6",
+          "text": "时间区间字段满足 `start <= end`；`date_precision` 为 `year` / `month` 时，未精确到日的日期以区间或首日表示，禁止用臆测的具体日期。",
+          "refs": [
+            "date_precision",
+            "work_item.occurred_at",
+            "project.start_date",
+            "project.end_date"
+          ]
+        },
+        {
+          "id": "J7",
+          "text": "树形结构（`function_module`、能力分类、领域）必须无环，且删除父节点前需处理子节点；`parent_id` / `parent_module_id` 不得指向自身。",
+          "refs": [
+            "function_module.parent_module_id",
+            "function_module.system_id",
+            "capability_category.parent_id",
+            "work_domain.parent_id"
+          ]
+        },
+        {
+          "id": "J8",
+          "text": "字典、标签、工作领域等可配置数据独立成表，供各模块复用，禁止在业务表里硬编码分类字符串。",
+          "refs": [
+            "dictionary",
+            "dict_item",
+            "tag",
+            "tag_link",
+            "work_domain"
+          ]
+        },
+        {
+          "id": "J9",
+          "text": "跨设备同步与备份不得改变主键与关联关系；`backup_record` 记录备份范围、格式、校验值与恢复结果，支持一键导出全量数据与迁移到新环境。",
+          "refs": [
+            "backup_record",
+            "backup_record.operation_type"
+          ]
+        },
+        {
+          "id": "J10",
+          "text": "分类类字段（如 `tag.category_item_id`、文件类型）取值必须是 `dictionary` 中已登记的 `dict_item.code`，不得自由填写或在代码里硬编码；界面用选择器而非文本输入。",
+          "refs": [
+            "tag.category_item_id",
+            "dictionary",
+            "dict_item.code"
+          ]
+        },
+        {
+          "id": "J11",
+          "text": "同一事物重复出现时，`alias_names` / `aliases` 的匹配结果只能作为候选线索：必须结合时间、领域与上下文给出匹配理由（`theme_member.match_reason`、`work_theme.merge_method`）并由用户确认，禁止仅凭别名字符串相等自动归并。",
+          "refs": [
+            "project.alias_names",
+            "function_module.alias_names",
+            "capability_alias.alias",
+            "theme_member.match_reason",
+            "work_theme.merge_method"
+          ]
+        },
+        {
+          "id": "J12",
+          "text": "`attachment` 与 `source_document` 的引用方向唯一：`attachment.owner_type` / `owner_id` 表示文件归属，`source_document.attachment_id` 表示该资料实际使用的文件；同一份文件按内容哈希去重，不得重复建档。",
+          "refs": [
+            "attachment.owner_type",
+            "attachment.owner_id",
+            "attachment.content_hash",
+            "source_document.attachment_id"
+          ]
+        },
+        {
+          "id": "J13",
+          "text": "`capability.is_core`（当前主要能力）只能由用户在看过证据后确认置位（`origin = user` 且 `review_status = confirmed`，且该能力至少有一条已确认的能力证据）；禁止按证据数量、事项数量或 AI 评分自动推导，成长总览的「核心能力概览」必须能下钻到证据。",
+          "refs": [
+            "capability.is_core",
+            "capability.review_status",
+            "capability_evidence.capability_id"
+          ]
+        },
+        {
+          "id": "J14",
+          "text": "合并与拆分血缘以 `entity_relation` 为权威记录（`merged_into` / `split_from` / `duplicate_of` / `replaced_by`）；实体上的 `merged_from_ids`、`merged_into_id`、`supersedes_id` 等字段只是便于展示的冗余快照，写入时必须与 `entity_relation` 同时维护，两者不一致时以 `entity_relation` 为准。",
+          "refs": [
+            "entity_relation.relation_type",
+            "project.merged_from_ids",
+            "business_system.merged_from_ids",
+            "function_module.merged_from_ids",
+            "capability_category.merged_into_id"
+          ]
+        },
+        {
+          "id": "J15",
+          "text": "`theme_member.member_type` 必须显式声明成员是工作事项、成果案例还是原始资料：主题的时间线由成员记录的时间聚合而来，阶段性成果与原始资料同样作为成员登记，不得把成果内容抄进 `work_theme.summary` 充当成员。",
+          "refs": [
+            "theme_member.member_type",
+            "theme_member.member_id",
+            "work_theme.summary",
+            "achievement_case"
+          ]
+        },
+        {
+          "id": "J16",
+          "text": "角色与贡献的权威记录是 `role_record`（含 `role`、`start_date`、`end_date` 与 `role_change_reason`）；项目、系统、模块、工作事项、成果案例上的 `my_role` 只是该对象当前角色的冗余展示，写入时必须与 `role_record` 同步，两者冲突时以 `role_record` 为准并在审核界面提示差异。职责范围与贡献说明不得只写在项目表上，必须能追溯到具体角色记录。",
+          "refs": [
+            "role_record.role",
+            "role_record.start_date",
+            "role_record.end_date",
+            "role_record.role_change_reason",
+            "role_record.target_type",
+            "role_record.target_id",
+            "project.my_role",
+            "work_item.my_role",
+            "achievement_case.my_role",
+            "function_module.my_role"
+          ]
+        },
+        {
+          "id": "J17",
+          "text": "成果的项目、系统、模块与领域归属以 `achievement_case` 上的直连字段（`project_id`、`system_id`、`module_id`、`domain_id`）为唯一口径；`achievement_item_link` 只描述成果与具体工作事项之间的贡献关系，不得据此反推出与该直连字段不同的归属。",
+          "refs": [
+            "achievement_case.project_id",
+            "achievement_case.system_id",
+            "achievement_case.module_id",
+            "achievement_case.domain_id",
+            "achievement_item_link.achievement_id",
+            "achievement_item_link.work_item_id"
+          ]
+        },
+        {
+          "id": "J18",
+          "text": "唯一性只在未删除记录之间成立：所有唯一约束以带 `WHERE deleted_at IS NULL` 的部分唯一索引落地，软删除后允许重建同名记录（如删除错误项目后重新录入同名项目）；组合唯一键中含非必填列时，还必须追加该列的 `IS NOT NULL` 条件，否则 NULL 会让约束失效。物理删除不在 V1.0 范围内。",
+          "refs": [
+            "project",
+            "dict_item.code",
+            "capability.code",
+            "evidence_evaluation.evidence_id"
+          ]
+        },
+        {
+          "id": "J19",
+          "text": "成长阶段必须由用户确认后才生效：`auto_detected = true` 的阶段只是 AI 候选，`review_status` 必须为 `confirmed` 才参与成长分析、时间轴与材料生成；每条阶段必须写明 `division_basis`（为何这样划分、依据哪些档案事实）与 `stage_type`（划分依据类型），AI 由 `detected_by_job_id` 回溯。AI 不得自行切换划分标准，给出候选时必须回显所用的标准。",
+          "refs": [
+            "growth_stage.auto_detected",
+            "growth_stage.review_status",
+            "growth_stage.division_basis",
+            "growth_stage.stage_type",
+            "growth_stage.detected_by_job_id"
+          ]
+        },
+        {
+          "id": "J20",
+          "text": "工作领域是**弱分类**：项目、工作事项、成果案例上的 `domain_id` 一律可选（不得设为必填），领域也不得作为能力评价或成长评级的换算口径；停用领域（`is_active = false`）只影响新增选择，不影响历史归属与统计。领域分布仅用于展示与筛选。",
+          "refs": [
+            "work_domain",
+            "work_domain.is_active",
+            "project.domain_id",
+            "work_item.domain_id",
+            "achievement_case.domain_id"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+== 提示词预览（未调用模型，未写入任何记录）==
+
+---- system ----
+你是一个个人成长档案的整理助手。用户把工作资料的原文片段交给你，你要从中识别出「工作事项」，以及这些事项所属的项目、系统、功能模块、工作领域，并按约定结构输出 JSON。
+
+硬性约束：
+1. 只输出 JSON 对象本身，不要输出解释、不要用 Markdown 代码块包裹。
+2. 只用原文里真实出现的信息。原文没有写的内容留空或省略，不补充、不猜测、不编造数字与指标。
+3. 每一条产出都必须给出 evidence：引用原文片段 id（fragment_id）与该片段中的关键原句（quote）；引用不到原文的产出不要输出。
+4. 如果某条内容是归纳推断（原文没有直接说），必须把 is_fact 设为 false，并在 fact_basis 里写清推断依据。
+5. 时间只取原文写明的日期；原文没写具体日期时用资料期间与对应精度（day/week/month/quarter/year/unknown），不要臆造精确日期。
+6. 「档案里已有的记录」里已经存在的项目、系统、模块、领域，直接使用它的准确名称，不要再造新记录；确实没出现过的才放进 new_* 里。
+7. 不评价用户的能力、性格或表现，只整理事实。
+8. 事实、推断、评价必须分开表达：评价性内容不要写进 content，可放进 notes。
+
+---- user ----
+【本次资料】
+标题：项目复盘-客户数据平台
+类型：achievement_note
+期间：未提供 ~ 未提供（期间精度：unknown）
+片段数：10
+
+【原文片段】
+[01a21ac5-01ff-7f5b-b67c-efd5ecfcc359] 客户数据平台建设复盘（示例数据） | 客户数据平台建设复盘（示例数据）
+[01a21ac5-01ff-72fe-8804-4659be161ab7] 客户数据平台建设复盘（示例数据） / 背景与问题 | 背景与问题
+[01a21ac5-01ff-7389-8e66-9f46d76be42c] 客户数据平台建设复盘（示例数据） / 背景与问题 | 各业务线指标口径不一致，同一指标在不同报表中口径不同，导致月度经营分析反复返工。
+[01a21ac5-01ff-7ab6-9057-f720e4ad4c23] 客户数据平台建设复盘（示例数据） / 行动与解决方案 | 行动与解决方案
+[01a21ac5-01ff-7581-a7bc-d4b9839ce263] 客户数据平台建设复盘（示例数据） / 行动与解决方案 | 主导口径梳理工作，建立指标定义模板，并把口径固化到数据质量校验规则中。
+[01a21ac5-01ff-7d22-a7a0-e2f1f95bb50f] 客户数据平台建设复盘（示例数据） / 行动与解决方案 | 阶段 | 产出 | 个人贡献
+[01a21ac5-01ff-7e8d-b771-f8d8e1133195] 客户数据平台建设复盘（示例数据） / 行动与解决方案 | 口径梳理 | 12 个核心指标定义 | 主导
+[01a21ac5-01ff-7163-a3b1-a4a16fd8c4f9] 客户数据平台建设复盘（示例数据） / 行动与解决方案 | 规则落地 | 8 条校验规则 | 负责
+[01a21ac5-01ff-7e0c-945d-e2c687251822] 客户数据平台建设复盘（示例数据） / 结果 | 结果
+[01a21ac5-01ff-7c36-a351-1c595351293d] 客户数据平台建设复盘（示例数据） / 结果 | 口径争议从每月 3 起降到 0 起；指标定义交付时间由 5 天缩短到 2 天。（示例指标）
+
+【档案里已有的记录】
+已有项目：客户数据平台建设
+已有系统：客户数据平台
+已有功能模块：指标口径管理、数据质量校验
+已有工作领域：数据平台
+已有工作事项（最近 5 条）：2024-04-02｜复盘平台建设经验｜review｜项目=客户数据平台建设
+2024-03-18｜修复数据质量校验规则 2 处误报｜testing｜项目=-
+2024-03-18｜与业务方确认 3 个争议口径｜communication｜项目=客户数据平台建设
+2024-03-18｜完成客户数据平台指标口径梳理｜requirement_analysis｜项目=客户数据平台建设
+2024-02-20｜梳理指标口径争议｜coordination｜项目=客户数据平台建设
+
+【取值口径】
+item_type 只能取：requirement_analysis / solution_design / development / testing / release / operations / issue_handling / communication / documentation / review / research / coordination / management / other
+project_type 只能取：new_build / enhancement / maintenance / research / process / support / other
+system_type 只能取：business_system / product / platform / middle_platform / tool / data_system / other
+project_status 只能取：planning / active / launched / maintaining / closed / paused / unknown
+system_status 只能取：planning / building / online / maintaining / offline / unknown
+module_type 只能取：core / business / technical / admin / data / other
+role_type 只能取：lead / owner / core / participant / support / observer
+date_precision 只能取：day / week / month / quarter / year / unknown
+
+【输出结构】
+{
+  "items": [
+    {
+      "title": "一句话标题，说明做了什么（必填）",
+      "item_type": "item_type 取值之一（必填）：requirement_analysis / solution_design / development / testing / release / operations / issue_handling / communication / documentation / review / research / coordination / management / other",
+      "content": "这件事的问题背景、过程与结果，尽量用原文措辞（必填）",
+      "occurred_at": "YYYY-MM-DD；取原文写明的日期，原文没有日期时用资料期间起点",
+      "date_precision": "day / week / month / quarter / year / unknown",
+      "project": "已有项目名称，或本次 new_projects 里的名称；没有就省略",
+      "system": "同上，系统名称",
+      "module": "同上，功能模块名称",
+      "domain": "工作领域名称",
+      "my_role": "role_type 取值之一：lead / owner / core / participant / support / observer；原文能看出「我」的角色时才填",
+      "complexity_level": "1~5 的整数；能从原文判断复杂度时才填",
+      "is_routine": "true / false，是否例行事务",
+      "effort_hours": "数字；原文写了工时或人天才填",
+      "deliverables": "交付物名称；原文提到才填",
+      "collaborators": "协作方；原文提到才填",
+      "is_fact": "true / false",
+      "fact_basis": "is_fact=false 时必填，写清推断依据",
+      "evidence": [{"fragment_id": "片段 id", "quote": "该片段中的关键原句",
+                    "relevance_type": "primary_source / supporting / contradicting / context"}]
+    }
+  ],
+  "new_projects": [{"name": "项目名称", "project_type": "new_build / enhancement / maintenance / research / process / support / other",
+                    "my_role": "lead / owner / core / participant / support / observer", "domain": "工作领域名称",
+                    "status": "planning / active / launched / maintaining / closed / paused / unknown",
+                    "background": "为什么做，依据原文", "goal": "目标，依据原文",
+                    "start_date": "YYYY-MM-DD", "evidence": []}],
+  "new_systems": [{"name": "系统名称", "system_type": "business_system / product / platform / middle_platform / tool / data_system / other",
+                   "status": "planning / building / online / maintaining / offline / unknown", "evidence": []}],
+  "new_modules": [{"name": "模块名称", "system": "所属系统名称",
+                   "module_type": "core / business / technical / admin / data / other", "evidence": []}],
+  "new_domains": [{"name": "工作领域名称"}],
+  "notes": "本次提取中不确定、需要用户确认的地方；没有就留空字符串"
+}

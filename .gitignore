@@ -1,0 +1,30 @@
+# 运行数据与个人隐私数据：默认不进版本库
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/attachments/
+data/*.log
+
+# 用户从飞书导出/下载的原始资料（个人工作内容）
+飞书导出/
+
+# 本机凭据（万一有人把配置放进来）
+config/feishu.json
+config/*.local.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 编辑器与系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 凭据文件备份
+*.bak-*
+*.bak

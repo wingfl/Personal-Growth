@@ -1,0 +1,647 @@
+{
+  "$comment": "00_base 基础层 + 01_source 原始资料层业务字段补全（13 个实体）",
+  "entities": [
+    {
+      "id": "user_profile",
+      "fields": [
+        {
+          "n": "email",
+          "l": "联系邮箱",
+          "t": "string",
+          "idx": true,
+          "d": "用户可能填写的联系邮箱，用于材料抬头与导出文件的著作者信息；与登录凭证无关，不在本字段存密码或令牌。"
+        },
+        {
+          "n": "phone",
+          "l": "联系电话",
+          "t": "string",
+          "d": "用户可能填写的联系电话，仅用于简历等材料抬头；可为空，导出对外材料时默认不输出。"
+        },
+        {
+          "n": "current_company",
+          "l": "当前任职公司",
+          "t": "string",
+          "d": "用户填写的当前雇主名称，用于简历与述职材料的「现任职」表述；不得由 AI 依据资料推断后直接写入。"
+        },
+        {
+          "n": "current_title_start_date",
+          "l": "当前职位起始日期",
+          "t": "date",
+          "d": "用户填入当前职位的起始日期，用于计算当前职位任职时长；只精确到月时按当月首日存储。"
+        },
+        {
+          "n": "target_position",
+          "l": "目标岗位",
+          "t": "string",
+          "d": "用户填写的求职或晋升目标岗位，供材料生成选择重点方向使用；属于用户意图，不得由 AI 代填。"
+        },
+        {
+          "n": "location_city",
+          "l": "常驻城市",
+          "t": "string",
+          "d": "用户工作所在城市，用于简历基本信息与异地经历说明；用户未填写时保持为空而不猜测。"
+        },
+        {
+          "n": "industry",
+          "l": "所属行业",
+          "t": "string",
+          "d": "用户主要从业行业，用于材料中的行业背景描述；可由用户从字典选择或自行填写。"
+        }
+      ],
+      "rules": [
+        "`current_title_start_date` 早于 `work_start_date` 时校验失败。",
+        "`current_title` 非空时 `current_company` 应有值，避免出现没有雇主的当前职位。"
+      ],
+      "notes": [
+        "本表是单用户系统的单例表，全库只应存在一行；因此不需要「归属用户」外键，也不应出现在列表型导出中。",
+        "`summary` 只允许用户本人编辑；AI 想改写必须走 change_proposal（需求 6.5 与原则 ④），通用字段组的 origin/review_status 已能表达这一点。",
+        "需求未包含教育经历、证书、语言能力等实体，V1.0 不建；如后续需要，应各自独立成实体而不是往 user_profile 堆字段。"
+      ]
+    },
+    {
+      "id": "attachment",
+      "fields": [
+        {
+          "n": "mime_type",
+          "l": "媒体类型",
+          "t": "string",
+          "d": "由上传时探测得到的 MIME 类型（如 application/pdf），决定解析器选择与前端预览方式。"
+        },
+        {
+          "n": "file_size",
+          "l": "文件大小",
+          "t": "integer",
+          "d": "单位为字节的原始文件大小，用于导入前预估解析耗时与展示存储占用。",
+          "min": 0
+        },
+        {
+          "n": "page_count",
+          "l": "页数",
+          "t": "integer",
+          "d": "PDF、PPT、Word 的页数，用于资料列表展示与碎片定位的页码换算；无法取得时为空。",
+          "min": 0
+        },
+        {
+          "n": "storage_backend",
+          "l": "存储后端",
+          "t": "string",
+          "d": "文件实际存放位置类型（如 local、s3、webdav），配合 `storage_path` 才能还原完整定位，迁移环境时必须同步更新。"
+        },
+        {
+          "n": "thumbnail_path",
+          "l": "缩略图路径",
+          "t": "file",
+          "d": "系统为图片或文档首页生成的缩略图路径，仅用于列表预览；生成失败时为空，不影响原始文件可用性。"
+        },
+        {
+          "n": "file_modified_at",
+          "l": "文件最后修改时间",
+          "t": "datetime",
+          "d": "来自文件系统或上传方给出的原始修改时间，用于判断资料新旧；不得用上传时间代替。"
+        }
+      ],
+      "rules": [
+        "`file_size` 为 0 的附件视为空文件，不允许成为 `source_document.attachment_id` 的来源。",
+        "`storage_path` + `storage_backend` 必须能唯一定位一份文件；同一组合不得指向不同内容哈希。"
+      ],
+      "notes": [
+        "`attachment.owner_type/owner_id` 与 `source_document.attachment_id` 对同一文件存在双向引用，实现时须约定以 source_document 侧为准，否则一次上传会产生两条附件记录。",
+        "core 的 `content_hash` 未标唯一，跨设备同步后可能出现同一文件多行，去重需应用层按 (content_hash, file_size) 处理。",
+        "本表未带 origin 通用字段组：附件始终是用户上传或系统导入的物理文件，不存在 AI 生成附件的场景，因此不需要 origin。"
+      ]
+    },
+    {
+      "id": "work_domain",
+      "fields": [
+        {
+          "n": "code",
+          "l": "领域编码",
+          "t": "string",
+          "u": true,
+          "d": "稳定不变的领域标识，用于导入匹配与统计聚合；系统内置领域使用固定编码，用户自建领域可自动生成。"
+        },
+        {
+          "n": "is_system",
+          "l": "系统内置",
+          "t": "boolean",
+          "def": "false",
+          "d": "标记随系统预置的领域；内置项的编码不可修改，名称与说明可由用户本地化调整。"
+        },
+        {
+          "n": "is_active",
+          "l": "是否启用",
+          "t": "boolean",
+          "def": "true",
+          "d": "停用后不再出现在新增工作事项的领域选择器中，历史归属关系保留不受影响。"
+        },
+        {
+          "n": "sort_order",
+          "l": "排序",
+          "t": "integer",
+          "def": "0",
+          "d": "同级领域在界面上的展示顺序，数值小的排在前面；相同值按名称排序兜底。",
+          "min": 0
+        },
+        {
+          "n": "aliases",
+          "l": "领域别名",
+          "t": "string",
+          "d": "用分号分隔的其他叫法，供 AI 在资料中匹配同一领域时使用，避免同一领域被重复建档。"
+        }
+      ],
+      "rules": [
+        "`parent_id` 不得指向自身，领域树不得成环。",
+        "`is_system = true` 时 `code` 不可修改，仅可调整 `name`、`description` 与 `is_active`。"
+      ],
+      "notes": [
+        "需求 6.6 的「工作领域分布」按领域聚合，建议在查询时统计而不是在本表存计数字段，避免计数与 work_item/project 的归属不一致。",
+        "领域被停用或合并时，历史归属不应改写；确需合并应通过 entity_relation 的 merged_into 表达并保留被合并领域。"
+      ]
+    },
+    {
+      "id": "dictionary",
+      "fields": [
+        {
+          "n": "description",
+          "l": "字典说明",
+          "t": "text",
+          "d": "说明该字典约束哪些字段、由谁维护，供实现者判断新增取值应登记到此处还是代码枚举。"
+        },
+        {
+          "n": "scope",
+          "l": "适用范围",
+          "t": "string",
+          "d": "可用该字典的实体或模块范围（如 capability、material），防止同一个字典被不相关模块误用。"
+        },
+        {
+          "n": "is_active",
+          "l": "是否启用",
+          "t": "boolean",
+          "def": "true",
+          "d": "停用后其下字典项不再出现在选择器，但已引用的历史数据保留可读。"
+        },
+        {
+          "n": "sort_order",
+          "l": "排序",
+          "t": "integer",
+          "def": "0",
+          "d": "字典在管理列表中的展示顺序；字典项之间另有 dict_item.sort_order 控制。",
+          "min": 0
+        },
+        {
+          "n": "is_ai_extendable",
+          "l": "允许 AI 扩展",
+          "t": "boolean",
+          "def": "false",
+          "d": "为真时 dictionary_build 作业可对该字典提出新词条建议（仍须用户确认后入库），为假时只允许用户手工新增。"
+        }
+      ],
+      "rules": [
+        "`is_system = true` 时 `code` 不可修改，仅可调整展示名称与说明。",
+        "`is_ai_extendable = true` 的字典，其 AI 新增词条必须先形成 change_proposal，不得直接写入 dict_item。"
+      ],
+      "notes": [
+        "系统内置字典的 `code` 与 enums 同名（core 已如此）：实现时以代码常量为取值真源，字典表只负责展示名与启停，避免枚举与字典各改一半。",
+        "字典本身未带 origin 通用字段组；若允许 AI 新建整本字典，需补 origin/review_status，当前按用户维护处理。"
+      ]
+    },
+    {
+      "id": "dict_item",
+      "fields": [
+        {
+          "n": "description",
+          "l": "词条说明",
+          "t": "text",
+          "d": "该取值的定义与使用场景说明，例如能力词条的表现描述；供材料生成与用户理解词条差异。"
+        },
+        {
+          "n": "aliases",
+          "l": "同义词",
+          "t": "string",
+          "d": "用分号分隔的同义叫法，供导入与 AI 归并时把不同写法映射到同一词条。"
+        },
+        {
+          "n": "is_default",
+          "l": "是否默认值",
+          "t": "boolean",
+          "def": "false",
+          "d": "为真时该字典项作为新建记录的默认取值；同一字典下只应有一项为真。"
+        },
+        {
+          "n": "merged_into_id",
+          "l": "归并目标",
+          "t": "ref",
+          "ref": "dict_item",
+          "d": "同义项被归并后指向保留词条；非空表示该词条已弃用但历史引用仍需可解释。"
+        },
+        {
+          "n": "external_ref",
+          "l": "外部编码",
+          "t": "string",
+          "d": "来自其他系统的原始编码，用于数据迁移与多环境对齐，不参与界面展示。"
+        }
+      ],
+      "rules": [
+        "同一 `dictionary_id` 下 `code` 唯一（core 未加唯一约束，需应用层或联合唯一索引保证）。",
+        "同一 `dictionary_id` 下 `is_default = true` 的记录至多一条。",
+        "`merged_into_id` 不得指向自身，也不得指向另一条同样被归并的词条，避免归并链成环。",
+        "`merged_into_id` 非空的词条不再出现在选择器中，但历史数据仍按原 code 可读。"
+      ],
+      "notes": [
+        "能力词典的同义词归并由 capability_alias 承担，本表的 `aliases` 只服务普通字典项，两者不要混用。",
+        "本实体没有 origin 通用字段组，而 dictionary_build 作业会提议新能力词条：建议给 dict_item 补 origin/review_status（或在 change_proposal 侧保留建议来源），否则 AI 提出的词条无法在记录本身区分来源。",
+        "`sort_order` 在 core 已存在，本层不重复定义。"
+      ]
+    },
+    {
+      "id": "tag",
+      "fields": [
+        {
+          "n": "description",
+          "l": "标签说明",
+          "t": "text",
+          "d": "说明该标签的判定口径，避免不同用户对同一标签理解不一致导致标注漂移。"
+        },
+        {
+          "n": "is_active",
+          "l": "是否启用",
+          "t": "boolean",
+          "def": "true",
+          "d": "停用后不再出现在打标选择器与 AI 候选集中，已有 tag_link 保留以便历史材料可解释。"
+        },
+        {
+          "n": "sort_order",
+          "l": "排序",
+          "t": "integer",
+          "def": "0",
+          "d": "标签在候选列表中的展示顺序，常用于把高频或重点标签排前。",
+          "min": 0
+        },
+        {
+          "n": "applicable_entity_types",
+          "l": "适用对象类型",
+          "t": "json",
+          "d": "允许打该标签的实体类型数组（如 [\"project\",\"work_item\"]）；为空表示不限制，由界面据此过滤候选标签。"
+        },
+        {
+          "n": "aliases",
+          "l": "标签别名",
+          "t": "string",
+          "d": "用分号分隔的别名，导入资料时用于把已有叫法归一到本标签，减少重复标签。"
+        }
+      ],
+      "rules": [
+        "`is_active = false` 的标签不允许新增 tag_link，但已存在的关联不受影响。"
+      ],
+      "notes": [
+        "core 的 `category` 是自由文本，与 J8「可配置分类」相悖；建议后续将其替换为对 dict_item 的引用，本层不新增枚举也不新造 category 表。",
+        "`applicable_entity_types` 使用 json 而非多个布尔位，是为了随实体清单变化自动兼容；校验留在应用层。"
+      ]
+    },
+    {
+      "id": "tag_link",
+      "fields": [
+        {
+          "n": "link_source",
+          "l": "打标来源",
+          "t": "enum",
+          "e": "origin",
+          "def": "user",
+          "d": "区分用户手工打标、AI 建议打标、导入匹配或系统规则生成，决定是否需要在界面提示。"
+        },
+        {
+          "n": "is_primary",
+          "l": "是否主标签",
+          "t": "boolean",
+          "def": "false",
+          "d": "同一对象上用于列表与卡片首屏展示的主标签；同一 entity_type + entity_id 下至多一个为真。"
+        },
+        {
+          "n": "reason",
+          "l": "打标理由",
+          "t": "string",
+          "d": "AI 或用户给出的打标依据摘要；用户手工打标时可为空，便于之后复核为何打上该标签。"
+        }
+      ],
+      "rules": [
+        "同一 (`tag_id`, `entity_type`, `entity_id`) 组合不得重复（core 未加唯一约束，需联合唯一索引）。",
+        "同一 (`entity_type`, `entity_id`) 下 `is_primary = true` 的记录至多一条。",
+        "`link_source = ai_agent` 且 `is_user_confirmed = false` 的标签不参与统计与画像，仅作建议展示。"
+      ],
+      "notes": [
+        "本实体没有 origin/review_status 通用字段组，因此新增 `link_source`/`is_user_confirmed` 表达 AI 建议；若后续统一通用字段组，应改为复用 `origin`，避免两套语义并存。"
+      ]
+    },
+    {
+      "id": "provenance_link",
+      "fields": [],
+      "rules": [
+        "`quote_text` 必须是 `fragment_id` 对应 `source_fragment.text` 的连续子串，由系统自动摘录，不接受手工填写。",
+        "`match_method` 非 user_manual 时，该链接不得单独作为结论进入已确认档案的依据。",
+        "`fragment_id` 指向的片段被软删除时，必须先校验反向引用或提示用户确认连带影响（G2）。"
+      ],
+      "notes": [
+        "`quote_text` 必须是 `fragment_id` 对应 `source_fragment.text` 的连续子串，由系统自动摘录，不接受手工填写。",
+        "`match_method` 非 user_manual 时，该链接不得单独作为结论进入已确认档案的依据。",
+        "`fragment_id` 指向的片段被软删除时，必须先校验反向引用或提示用户确认连带影响（G2）。",
+        "本实体现已挂 origin + review 两个通用字段组：审核状态用 `review_status`（pending 待确认 / confirmed 已确认），置信度用 `confidence`，审核时间用 `reviewed_at`；不再另立 is_user_confirmed 等字段。",
+        "`provenance_relation` 已新增 `inferred`（有原文但结论属归纳）取值；完全没有原文支撑的推断不建 provenance_link，改用 `origin = ai_agent` + `is_fact = 0` 表达（规则 B2）。因此 `fragment_id` 保持必填。"
+      ]
+    },
+    {
+      "id": "entity_relation",
+      "fields": [
+        {
+          "n": "strength",
+          "l": "关联强度",
+          "t": "decimal",
+          "d": "0~1 的关联紧密程度，用于主题归并与画像统计时按强度加权；用户手工建立的关联默认 1.0。",
+          "min": 0,
+          "max": 1
+        },
+        {
+          "n": "is_active",
+          "l": "是否生效",
+          "t": "boolean",
+          "def": "true",
+          "d": "记录该关联的最终结论：被用户否定或已被新关联取代的置为 false，false 的关联不参与归并与统计。"
+        },
+        {
+          "n": "basis_text",
+          "l": "判定依据",
+          "t": "text",
+          "d": "建立该关联的事实依据摘要（如两处资料同时提到同一项目名），是用户复核关联建议的主要材料。"
+        },
+        {
+          "n": "valid_from",
+          "l": "生效起始",
+          "t": "date",
+          "d": "该关联成立的起始时间，例如个人开始参与某项目的月份；为空表示不限起点。"
+        },
+        {
+          "n": "valid_to",
+          "l": "生效结束",
+          "t": "date",
+          "d": "该关联失效的时间；为空表示仍然有效，用于区分历史归属与当前归属。"
+        }
+      ],
+      "rules": [
+        "`valid_to` 早于 `valid_from` 时校验失败；两者同时可空表示长期有效。",
+        "禁止 `from_type` + `from_id` 与 `to_type` + `to_id` 完全相同的自反关联。",
+        "`is_active = false` 的关联不参与主题归并、时间线与画像统计。",
+        "`origin = ai_agent` 的关联在 `is_active` 置为 true 前必须经过用户确认。"
+      ],
+      "notes": [
+        "core 未对 (`from_type`,`from_id`,`to_type`,`to_id`,`relation_type`) 加唯一约束，AI 关联建议容易产生重复边，需应用层去重或建联合唯一索引。",
+        "G3 要求归并保留被归并方标识与历史：建议统一用 merged_into 关系表达，并把被归并记录置为 review_status = superseded（通用字段组已提供），不要物理删除。",
+        "多态外键的引用完整性由应用层保证，本表不建数据库外键。"
+      ]
+    },
+    {
+      "id": "audit_log",
+      "fields": [
+        {
+          "n": "client_type",
+          "l": "接入类型",
+          "t": "enum",
+          "e": "client_type",
+          "imm": true,
+          "idx": true,
+          "d": "本次变更从哪种入口发起（Web、MCP、CLI、REST），用于区分用户界面操作与 Agent 接口写入。"
+        },
+        {
+          "n": "client_ip",
+          "l": "来源 IP",
+          "t": "string",
+          "imm": true,
+          "d": "发起操作的对端 IP，用于异常写入排查；属个人信息，对外导出时需评估脱敏。"
+        },
+        {
+          "n": "client_agent",
+          "l": "客户端标识",
+          "t": "string",
+          "imm": true,
+          "d": "User-Agent 或 CLI/Agent 客户端版本标识，用于定位某次异常写入来自哪个工具版本。"
+        },
+        {
+          "n": "batch_id",
+          "l": "批次标识",
+          "t": "uuid",
+          "imm": true,
+          "idx": true,
+          "d": "同一次批量操作（批量导入、批量确认建议）共享同一批次号，便于整体回溯与按批次撤销评估。"
+        },
+        {
+          "n": "actor_credential_id",
+          "l": "Agent 凭证",
+          "t": "ref",
+          "ref": "agent_credential",
+          "imm": true,
+          "d": "当 actor_type 为 ai_agent 时记录具体凭证，用于区分是哪一个 Agent 或以何种权限范围发起的写入。"
+        },
+        {
+          "n": "remark",
+          "l": "操作备注",
+          "t": "text",
+          "imm": true,
+          "d": "记录用户填写的变更原因或系统补充说明，例如拒绝 AI 建议的理由，用于事后审计解释。"
+        }
+      ],
+      "rules": [
+        "`actor_type = ai_agent` 时 `actor_credential_id` 应有值，用于定位发起写入的 Agent 凭证。",
+        "审计日志只增不改不删：本表所有业务字段（含本层新增字段）写入后禁止更新。",
+        "`before_payload` 与 `after_payload` 必须为被改字段的最小差集，不得整行快照，避免日志膨胀。"
+      ],
+      "notes": [
+        "通用字段组给 audit_log 带入了 `updated_at`、`revision`、`deleted_at`，与 J4「只增不改不删」冲突：实现时应忽略这三个字段，或用触发器禁止对 audit_log 的 UPDATE/DELETE。",
+        "core 缺少「变更原因码」枚举，`remark` 目前只能承载自由文本；若要按原因统计拒绝率，需要登记枚举。"
+      ]
+    },
+    {
+      "id": "source_document",
+      "fields": [
+        {
+          "n": "summary",
+          "l": "内容摘要",
+          "t": "string",
+          "d": "资料内容摘要，解析完成后由系统或 AI 生成，用于列表预览与检索；属规则 A2 允许变更的白名单字段。"
+        },
+        {
+          "n": "word_count",
+          "l": "字数",
+          "t": "integer",
+          "d": "解析后正文的字数统计，用于资料体量展示与「资料数量不等于能力成长」的覆盖率说明；口径按 raw_text 去除首尾空白后的字符数。",
+          "min": 0
+        },
+        {
+          "n": "language",
+          "l": "正文语言",
+          "t": "string",
+          "d": "正文主要语言编码（如 zh、en），决定 AI 提取提示词与摘要质量，中英混排时取占比更高者。"
+        },
+        {
+          "n": "source_created_at",
+          "l": "资料原始时间",
+          "t": "datetime",
+          "idx": true,
+          "d": "资料本身产生的时间（如周报提交时间、文件修改时间），与入库时间区分，用于工作动态时间线排序。"
+        },
+        {
+          "n": "duplicate_of_id",
+          "l": "重复来源资料",
+          "t": "ref",
+          "ref": "source_document",
+          "idx": true,
+          "d": "内容哈希命中已有资料时指向被重复的那一份，落实规则 A3 的重复检测；为空表示非重复资料。"
+        },
+        {
+          "n": "version_no",
+          "l": "版本号",
+          "t": "integer",
+          "def": "1",
+          "d": "同一来源资料被作为新版本重新导入时的序号，从 1 递增；用于把修订稿与原稿串成一族。",
+          "min": 1
+        },
+        {
+          "n": "processing_error",
+          "l": "解析失败原因",
+          "t": "text",
+          "d": "processing_status = failed 时记录解析器返回的错误摘要，供用户判断是重试还是改用其他格式导入。"
+        },
+        {
+          "n": "archive_note",
+          "l": "归档说明",
+          "t": "string",
+          "d": "用户对该资料的归档备注，例如说明它属于哪一阶段或为何保留；属 A2 允许变更的归档信息。"
+        }
+      ],
+      "rules": [
+        "`summary`、`word_count` 由系统在解析完成后写入，属 A2 白名单字段；`raw_text`、`content_hash` 写入后不得被任何角色修改。",
+        "`period_end` 早于 `period_start` 时校验失败。",
+        "`duplicate_of_id` 指向的资料不得再反向指回本条，避免重复链成环。",
+        "`processing_status = failed` 时 `processing_error` 应有值。"
+      ],
+      "notes": [
+        "A2 白名单中的 `deleted_at` 由通用字段组提供，part 层不重复定义。",
+        "core 没有「重复导入处理方式（跳过 / 作为新版本 / 仍要导入）」的枚举，A3 的三种选择目前只能落在 `duplicate_of_id` + `version_no` 上，动作本身无处记录，建议登记枚举。",
+        "`summary` 按任务要求为 string（约 255 字符），长资料摘要可能超长；若实现选 VARCHAR(255) 需截断，建议实际落库放宽为 text。",
+        "core 缺少资料「归档/已处理」的显式状态位，本层用 processing_status + archive_note 近似表达，未新增枚举。"
+      ]
+    },
+    {
+      "id": "source_fragment",
+      "fields": [
+        {
+          "n": "parse_confidence",
+          "l": "切分置信度",
+          "t": "decimal",
+          "d": "0~1 的片段切分质量评分，由解析器给出；低于阈值时界面提示该片段定位可能不准，供人工修正。",
+          "min": 0,
+          "max": 1
+        },
+        {
+          "n": "page_no",
+          "l": "页码",
+          "t": "integer",
+          "d": "片段在原始 PDF/Word 中的页码，从 1 开始；纯文本或无法定位时为空，用于回原文跳页。",
+          "min": 1
+        },
+        {
+          "n": "anchor_selector",
+          "l": "定位选择器",
+          "t": "string",
+          "d": "界面一键跳转并高亮该片段所需的选择器（如标题路径 + 段落序号），在字符偏移不可用时作为兜底定位（G4）。"
+        },
+        {
+          "n": "text_hash",
+          "l": "片段文本哈希",
+          "t": "string",
+          "imm": true,
+          "idx": true,
+          "d": "片段文本的 SHA-256，用于校验片段自入库后未被篡改，是 A1 不可变性的技术保障。"
+        },
+        {
+          "n": "heading_level",
+          "l": "标题层级",
+          "t": "integer",
+          "d": "fragment_type = heading 时的标题层级（1 为一级标题）；非标题片段为空，用于在目录树中还原结构。",
+          "min": 1
+        }
+      ],
+      "rules": [
+        "同一 `document_id` 内 `order_index` 唯一，且相邻片段的 `char_start`/`char_end` 不得重叠（core 未加约束，需应用层或检查约束保证）。",
+        "`char_start`、`char_end` 必须落在 `source_document.raw_text` 的长度范围内；两者为空表示无法定位到字符偏移，此时必须提供 `anchor_selector`。",
+        "`fragment_type = heading` 时 `heading_level` 应有值，其余片段类型应为空。"
+      ],
+      "notes": [
+        "core 中 `char_start`/`char_end` 非必填，与 A4 的「区间不得越界」校验存在语义空白：需明确 NULL 与 0 的含义（建议 NULL 表示不可定位）。",
+        "`heading_path` 是写入时的字符串快照，标题后续变化不会同步；它只作展示，定位真源应是 anchor_selector 或字符区间。",
+        "本实体没有 origin 通用字段组：片段全部由解析器产生，不存在用户手工新建片段，因此不需要 origin。"
+      ]
+    },
+    {
+      "id": "import_batch",
+      "fields": [
+        {
+          "n": "initiated_by",
+          "l": "发起者类型",
+          "t": "enum",
+          "e": "actor_type",
+          "def": "user",
+          "d": "本次导入由用户界面、AI Agent 接口还是系统自动任务发起，用于排查批量写入来源。"
+        },
+        {
+          "n": "started_at",
+          "l": "开始时间",
+          "t": "datetime",
+          "d": "批次开始处理的时间，用于计算导入耗时与定位卡住的批次；排队中时为空。"
+        },
+        {
+          "n": "finished_at",
+          "l": "结束时间",
+          "t": "datetime",
+          "d": "批次进入成功/失败/取消终态的时间；未结束时为空，与 started_at 共同给出处理时长。"
+        },
+        {
+          "n": "failure_reason",
+          "l": "失败原因",
+          "t": "text",
+          "d": "批次失败或部分失败时的汇总原因（如文件格式不支持、编码无法识别），供用户决定重试或换格式。"
+        },
+        {
+          "n": "duplicate_count",
+          "l": "重复命中数",
+          "t": "integer",
+          "def": "0",
+          "d": "本次导入中内容哈希命中已有资料的条数，落实 A3 的重复提示；这些文件不重复入库。",
+          "min": 0
+        },
+        {
+          "n": "total_size_bytes",
+          "l": "总字节数",
+          "t": "integer",
+          "def": "0",
+          "d": "本次导入全部文件的字节总量（单位字节），用于容量统计与导入前配额判断。",
+          "min": 0
+        },
+        {
+          "n": "batch_label",
+          "l": "批次名称",
+          "t": "string",
+          "d": "便于用户识别的批次名称，默认由渠道加时间生成，例如「10月周报批量导入」，可在列表中修改。"
+        }
+      ],
+      "rules": [
+        "`finished_at` 早于 `started_at` 时校验失败。",
+        "`success_count + failed_count + duplicate_count <= file_count`，超出即校验失败。",
+        "`status` 进入 succeeded / failed / cancelled 终态时 `finished_at` 必须有值。",
+        "`failed_count > 0` 时 `failure_reason` 应有值。"
+      ],
+      "notes": [
+        "`status` 复用 job_status，没有「部分成功」状态；需要区分时只能用 `failure_reason` 与 `failed_count` 说明。",
+        "A3 要求重复导入必须让用户选择跳过/新版本/仍要导入，本表只统计重复数量，逐文件的选择结果落在 source_document 的 duplicate_of_id 与 version_no 上。",
+        "本表未带 origin 通用字段组：批次的来源渠道由 source_channel 表达，且批次不是 AI 生成内容，无需 origin。"
+      ]
+    }
+  ]
+}

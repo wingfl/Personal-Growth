@@ -1,0 +1,869 @@
+{
+  "$comment": "04_portrait 个人画像 + 05_growth 成长分析与输出 + 06_ai AI 与数据运维 三层业务字段补全（17 个实体）",
+  "entities": [
+    {
+      "id": "capability_category",
+      "fields": [
+        {
+          "n": "category_path",
+          "l": "分类路径",
+          "t": "string",
+          "d": "从根分类到本分类的名称路径（如「技术能力/后端工程」），由 parent_id 链派生并冗余存储，供列表展示与重复分类识别；父分类改名时需批量重建。",
+          "idx": true
+        },
+        {
+          "n": "level_depth",
+          "l": "分类层级深度",
+          "t": "integer",
+          "d": "分类层级深度，根分类为 1、其子为 2；由 parent_id 派生，用于校验当前只支持两级分类并支持按层检索。",
+          "min": 1
+        },
+        {
+          "n": "is_assignable",
+          "l": "可挂载能力",
+          "t": "boolean",
+          "d": "是否允许能力词条直接挂到本分类；纯分组用的父分类置 false，避免能力挂在不该挂的层级上。",
+          "def": "true"
+        },
+        {
+          "n": "merged_into_id",
+          "l": "归并后指向",
+          "t": "ref",
+          "ref": "capability_category",
+          "d": "本分类被归并后指向保留下来的分类；非空表示该分类已弃用，历史能力词条按此跳转，不再新建关联。"
+        },
+        {
+          "n": "category_boundary_note",
+          "l": "分类边界说明",
+          "t": "text",
+          "d": "写明哪些能力属于本类、哪些看似相近但不属于，供 AI 归类与人工复核对齐口径，减少同一能力被归到多类。"
+        }
+      ],
+      "rules": [
+        "`parent_id` 不得指向自身，且沿 `parent_id` 上溯不得成环（对应 J7）。",
+        "`level_depth` 由 `parent_id` 派生，写入时必须与实际层级一致，不得手工指定与父分类不符的值。",
+        "`is_assignable = false` 的分类下不得存在 active 的能力词条。"
+      ],
+      "notes": [
+        "需求只要求支持两级分类，`level_depth` 因此按 1/2 校验；若后续放开三级，只改校验规则、不删字段。"
+      ]
+    },
+    {
+      "id": "capability",
+      "fields": [
+        {
+          "n": "framework_name",
+          "l": "所属能力体系",
+          "t": "string",
+          "d": "该词条归属的能力体系名称（如「研发职级能力体系 2024 版」），用于多套体系并存时区分同名能力。"
+        },
+        {
+          "n": "capability_level_rank",
+          "l": "能力层级序号",
+          "t": "integer",
+          "d": "该能力在所属体系中的层级序号 1~5（1 为最基础、数字越大越综合），用于词典分层展示与筛选；具体等级含义见 level_scale_note。",
+          "min": 1,
+          "max": 5
+        },
+        {
+          "n": "typical_behavior",
+          "l": "典型行为描述",
+          "t": "text",
+          "d": "能体现该能力的典型行为清单，供 AI 从工作事项与成果中匹配证据，避免只凭关键词命中。"
+        },
+        {
+          "n": "misuse_boundary_note",
+          "l": "误用与边界说明",
+          "t": "text",
+          "d": "常见误用（如把「会用某工具」当成「具备该能力」）与能力边界说明，用于审核 AI 提取结果时判断证据是否越界。"
+        },
+        {
+          "n": "job_role_relation_note",
+          "l": "岗位职责关系",
+          "t": "text",
+          "d": "该能力通常对应哪些岗位、职责范围或职级要求，用于画像与目标岗位匹配时说明能力与岗位的关联。"
+        },
+        {
+          "n": "status_changed_at",
+          "l": "状态变更时间",
+          "t": "datetime",
+          "d": "词条启用/停用状态最近一次变更时间（对应 status 由 active 切到 deprecated），用于解释某能力近期为何没有新增证据。"
+        }
+      ],
+      "rules": [
+        "`status = active` 且 `evaluation_reference` 为空的词条不得作为能力结论的判据，生成画像时只能展示原始证据（对应 D4）。",
+        "`status = deprecated` 后不得新增能力证据关联，历史关联保留；切换时写入 `status_changed_at`。",
+        "`framework_name` 与 `name` 均相同的词条判定为重复，必须通过归并处理而不是并存。"
+      ],
+      "notes": [
+        "「是否启用」由 core 已有 `status`（capability_status：active/deprecated）表达，本 part 不重复定义布尔字段以免同一语义两处维护；`status_changed_at` 只补充状态变更时间。",
+        "缺少按层级取值的枚举，`capability_level_rank` 暂用整数表达层级；建议在 core 登记能力层级枚举后改为枚举字段。"
+      ]
+    },
+    {
+      "id": "capability_alias",
+      "fields": [
+        {
+          "n": "normalized_alias",
+          "l": "归一化别名",
+          "t": "string",
+          "d": "别名归一化结果：去空格、统一大小写与全半角后的小写形式，供 AI 提取时匹配去重，避免「React」与「react 」生成两条别名。",
+          "idx": true
+        },
+        {
+          "n": "language",
+          "l": "别名形态",
+          "t": "string",
+          "d": "别名形态，取值 zh / en / abbr 之一（中文叫法、英文叫法、缩写），用于按资料语言选择匹配策略。"
+        },
+        {
+          "n": "usage_count",
+          "l": "命中次数",
+          "t": "integer",
+          "d": "该别名在已确认资料中被命中的累计次数，用于判断它是常用叫法还是偶发笔误，为归并提供依据。",
+          "def": "0",
+          "min": 0
+        },
+        {
+          "n": "last_matched_at",
+          "l": "最近命中时间",
+          "t": "datetime",
+          "d": "最近一次通过该别名匹配到本能力的时刻，用于清理长期未命中的别名，避免词典无限膨胀。"
+        },
+        {
+          "n": "is_preferred",
+          "l": "首选名称",
+          "t": "boolean",
+          "d": "是否为该能力对外展示的首选名称；同一能力下最多一条为真，导出与材料生成优先使用它。",
+          "def": "false"
+        }
+      ],
+      "rules": [
+        "同一 `capability_id` 下 `normalized_alias` 不得重复；`normalized_alias` 与任一能力 `name` 的归一化值相同时应提示归并，而不是新增别名。",
+        "`is_preferred` 在同一 `capability_id` 下至多一条为真，且其值不得与该能力的 `name` 冲突。"
+      ],
+      "notes": [
+        "`capability_alias` 的 flags 只有 `origin`，没有 `review_status`/`confidence`：AI 从资料中提出的别名（origin=ai_agent）无法标记「待审核/已确认」，只能靠 origin 区分来源。建议为该实体补 review 字段组，或明确别名一律随能力词条一起审核。"
+      ]
+    },
+    {
+      "id": "personal_trait",
+      "fields": [
+        {
+          "n": "applicable_context",
+          "l": "适用情境",
+          "t": "text",
+          "d": "该特征典型出现的工作情境（如需求不明确时的拆解、跨团队推进受阻时），用于区分稳定特征与特定情境下的临时表现。"
+        },
+        {
+          "n": "risk_note",
+          "l": "风险提示",
+          "t": "text",
+          "d": "特征被过度放大时可能带来的风险（如过度结构化导致响应变慢）；仅作提示，界面不得渲染成缺点或评价标签（对应 E3）。"
+        },
+        {
+          "n": "observation_span_months",
+          "l": "观察跨度月数",
+          "t": "integer",
+          "d": "观察时间跨度（月），由最近观察时间与首次观察时间派生；不足 3 个月的特征默认不作为正式画像结论。",
+          "min": 0
+        },
+        {
+          "n": "display_order",
+          "l": "展示排序",
+          "t": "integer",
+          "d": "画像页展示排序序号，由用户调整；取值小于等于 0 时表示由系统按证据数量自动排序。",
+          "def": "0",
+          "min": 0
+        },
+        {
+          "n": "merged_into_id",
+          "l": "归并后指向",
+          "t": "ref",
+          "ref": "personal_trait",
+          "d": "该特征被归并到哪条特征；非空表示本条已弃用，历史证据按此跳转，避免同一特征重复建档。"
+        }
+      ],
+      "rules": [
+        "`support_count` 与 `counter_count` 必须由 `trait_evidence` 按 `direction` 实时统计得出，禁止手工写入与证据不一致的值（对应 E2）。",
+        "`observation_span_months` 由 `first_observed_at` 与 `last_observed_at` 派生；两者为空时本字段为空，不得臆测。",
+        "`status = rejected` 的特征不得出现在画像展示与材料生成上下文中，但证据与历史必须保留（对应 E4）。"
+      ],
+      "notes": [
+        "core 用 `review_status` 枚举承载特征状态（候选=pending、已确认=confirmed、已否定=rejected、已废弃=superseded），与规则 E1「候选/已确认/已否定/已废弃」四态并非逐一对应，界面文案需自行映射，避免直接暴露枚举英文名。"
+      ]
+    },
+    {
+      "id": "trait_evidence",
+      "fields": [
+        {
+          "n": "recorded_by",
+          "l": "记录人类型",
+          "t": "enum",
+          "e": "actor_type",
+          "d": "该条证据的录入者类型（用户 / AI Agent / 系统），用于在画像页区分用户亲述的事实与 AI 从资料提取的结论。",
+          "req": true,
+          "def": "user"
+        },
+        {
+          "n": "is_adopted",
+          "l": "是否采纳",
+          "t": "boolean",
+          "d": "该条证据是否被用户采纳；未采纳的证据不计入 support_count / counter_count，也不进入画像与材料生成。",
+          "def": "false"
+        },
+        {
+          "n": "adopted_at",
+          "l": "采纳时间",
+          "t": "datetime",
+          "d": "用户采纳该证据的时间；驳回时为空，与 is_adopted 配合还原证据的审核过程。"
+        },
+        {
+          "n": "reject_reason",
+          "l": "未采纳原因",
+          "t": "text",
+          "d": "用户未采纳该证据的原因（如事实有误、与特征无关、情境不可迁移），用于避免同一证据被反复推送。"
+        },
+        {
+          "n": "observation_context",
+          "l": "证据情境",
+          "t": "text",
+          "d": "证据发生时的工作情境（项目阶段、团队规模、时间压力等），用于判断该表现能否迁移到其他场景。"
+        },
+        {
+          "n": "weight_basis",
+          "l": "权重判定依据",
+          "t": "text",
+          "d": "证据权重 weight 的判定依据：为何赋予该代表性等级，落实「评价必须有据」的要求（对应 B4）。"
+        }
+      ],
+      "rules": [
+        "`weight` 取值 1~5，且 `weight_basis` 非空时才允许 `is_adopted = true`。",
+        "`direction = counter` 的证据必须与 support 证据同等展示，不得因方向为负或未采纳而被过滤（对应 E2）。",
+        "`is_adopted = true` 时 `adopted_at` 必填；`is_adopted = false` 时为 `reject_reason` 必填。"
+      ],
+      "notes": [
+        "「证据强度」沿用 core 已有 `weight`（1~5 代表性权重），本 part 补充 `weight_basis` 记录判定依据，不再另立强度字段以免同一语义两处维护。",
+        "`target_type` 使用 ENTITY_TYPE 多态引用且未限制取值，理论上可指向 `personal_trait` 自身形成自证；建议应用层限定为工作实体类型（或改用已有的 `evidence_target_type` 枚举）。"
+      ]
+    },
+    {
+      "id": "self_assessment",
+      "fields": [
+        {
+          "n": "trigger_context",
+          "l": "自述场景",
+          "t": "text",
+          "d": "写下这段自述的场景（如季度复盘、晋升准备、被要求填写），用于理解评价的主观背景与时效。"
+        },
+        {
+          "n": "is_portrait_visible",
+          "l": "画像页可见",
+          "t": "boolean",
+          "d": "是否在画像页展示该自述；关闭后仍保留记录、仅不参与展示，便于用户区分私密备注与对外画像。",
+          "def": "true"
+        },
+        {
+          "n": "follow_up_note",
+          "l": "后续补充说明",
+          "t": "text",
+          "d": "用户后续的补充说明或修正意见；原自述 content 不可修改，只能通过本字段与新增记录演进。"
+        },
+        {
+          "n": "origin_document_id",
+          "l": "来源资料",
+          "t": "ref",
+          "ref": "source_document",
+          "d": "自述来源资料（如导入的个人总结文档）；在系统内手工输入时为空，用于自述内容的来源追溯。"
+        },
+        {
+          "n": "self_rating",
+          "l": "自评等级",
+          "t": "integer",
+          "d": "用户自评等级 1~5，仅代表用户主观感受；必须与 AI 评价分区展示，禁止混算为综合评分（对应 B5）。",
+          "min": 1,
+          "max": 5
+        }
+      ],
+      "rules": [
+        "`assessment_source = ai_draft` 的记录在 `review_status = confirmed` 前不得展示在画像页，也不得作为材料生成中的自我评价素材。",
+        "`scope` 非 `overall` 时 `target_id` 不得为空；`scope = capability/trait/growth_stage` 时 `target_id` 必须指向对应实体。"
+      ],
+      "notes": [
+        "自述原文按「原始内容不可修改」原则处理：编辑只能新增记录或写 `follow_up_note`，不建议开放 content 的原地覆盖。"
+      ]
+    },
+    {
+      "id": "growth_stage",
+      "fields": [
+        {
+          "n": "theme_summary",
+          "l": "阶段主题",
+          "t": "text",
+          "d": "阶段主题的一句话概括（如「从执行到独立负责模块」），用于时间轴标签与成长摘要取材，由用户或 AI 归纳后确认。"
+        },
+        {
+          "n": "key_project_ids",
+          "l": "代表性项目",
+          "t": "json",
+          "d": "该阶段代表性项目的 id 列表；写入时校验每个项目起止时间与阶段区间有交集，用于阶段说明与材料取材。"
+        },
+        {
+          "n": "key_achievement_ids",
+          "l": "代表性成果",
+          "t": "json",
+          "d": "该阶段代表性成果案例的 id 列表，供述职与阶段总结按阶段取材，避免跨阶段混用成果。"
+        },
+        {
+          "n": "work_domain_ids",
+          "l": "主要工作领域",
+          "t": "json",
+          "d": "该阶段主要工作领域的 id 列表，用于领域分布与经历曲线；取值须为 review_status=confirmed 的领域。"
+        },
+        {
+          "n": "detected_by_job_id",
+          "l": "划分作业",
+          "t": "ref",
+          "ref": "ai_job",
+          "d": "自动划分阶段时的 AI 作业，支撑「为何这样分阶段」的回溯；用户手工划分时为空。"
+        }
+      ],
+      "rules": [
+        "`auto_detected = true` 时必须能通过 `detected_by_job_id` 或 `division_basis` 说明划分依据，二者皆空时不得保存。",
+        "同一用户的阶段区间不得重叠，`stage_index` 必须按 `start_date` 升序连续递增。",
+        "`key_project_ids` 中任一项目的起止时间与阶段区间 `[start_date, end_date]` 无交集时校验失败，并提示用户调整。"
+      ],
+      "notes": [
+        "core 只有 `auto_detected` 布尔，没有指向生成作业的外键，AI 自动划分的阶段无法回溯到具体作业；本 part 用 `detected_by_job_id` 补齐。"
+      ]
+    },
+    {
+      "id": "growth_snapshot",
+      "fields": [
+        {
+          "n": "generation_trigger",
+          "l": "生成方式",
+          "t": "enum",
+          "e": "job_trigger",
+          "d": "快照生成方式（用户手动 / 定时 / Agent 调用 / 系统规则），用于区分人工分析与自动任务产出，需与 generated_by_job_id 一致。",
+          "req": true,
+          "def": "manual",
+          "imm": true
+        },
+        {
+          "n": "sample_basis",
+          "l": "样本量口径",
+          "t": "json",
+          "d": "纳入统计的资料、事项、证据的过滤条件（时间区间、review_status、实体类型、软删除排除等），使快照可复现、可解释。",
+          "imm": true
+        },
+        {
+          "n": "dimension_distribution",
+          "l": "能力维度分布",
+          "t": "json",
+          "d": "按复杂度、独立程度、责任范围、成果质量四维聚合的等级分布，区别于 metrics 里的计数指标。",
+          "imm": true
+        },
+        {
+          "n": "is_public",
+          "l": "对外可见",
+          "t": "boolean",
+          "d": "是否允许该快照作为对外材料（简历、述职、晋升）的取材来源；默认 false，需用户显式开启。",
+          "def": "false"
+        },
+        {
+          "n": "generated_by_job_id",
+          "l": "生成作业",
+          "t": "ref",
+          "ref": "ai_job",
+          "d": "生成该快照的 AI 作业；规则计算或手工创建时为空，此时 generation_trigger 应为 manual 或 system。",
+          "imm": true
+        },
+        {
+          "n": "metrics_version",
+          "l": "指标口径版本",
+          "t": "string",
+          "d": "指标键名口径版本（如 v1）；metrics 结构变更时递增，保证旧快照仍能按当时口径解释。",
+          "def": "v1",
+          "imm": true
+        }
+      ],
+      "rules": [
+        "`metrics` 与 `data_coverage` 必须同时非空，只有数值、没有覆盖度说明的快照不得保存（对应 I1）。",
+        "快照写入后 `metrics`/`data_coverage`/`sample_basis`/`dimension_distribution`/`metrics_version` 不可修改；修正历史结论只能新增快照并指向被修正的快照（对应 I3）。",
+        "`is_public = true` 要求 `review_status = confirmed`；未确认的快照不得进入材料生成上下文。"
+      ],
+      "notes": [
+        "core 已声明快照生成后不可修改（I3），但未在任何字段上标 `imm`；本 part 对自己新增的快照字段标了 `imm`，建议同时为 core 的 `metrics`/`data_coverage`/`snapshot_at` 补上不可修改标记。"
+      ]
+    },
+    {
+      "id": "material",
+      "fields": [
+        {
+          "n": "intended_usage",
+          "l": "具体用途",
+          "t": "text",
+          "d": "材料的具体用途（如「投递某公司后端岗」「Q3 部门述职」），比 material_type 更具体，决定取材侧重点与行文语气。"
+        },
+        {
+          "n": "format_requirement",
+          "l": "篇幅格式要求",
+          "t": "text",
+          "d": "篇幅与格式要求（字数上限、页数、标题层级、是否含表格），生成时作为硬约束写入提示词并用于成稿校验。"
+        },
+        {
+          "n": "word_limit",
+          "l": "字数上限",
+          "t": "integer",
+          "d": "正文字数上限，按中文字符数统计；0 表示不限，超出上限时应提示精简而不是静默截断。",
+          "def": "0",
+          "min": 0
+        },
+        {
+          "n": "data_scope_snapshot",
+          "l": "取材范围快照",
+          "t": "json",
+          "d": "生成时实际取材的数据范围（实体类型、时间段、引用的实体 id 清单与过滤条件），用于解释「为什么没写某段经历」并支持复现。",
+          "imm": true
+        },
+        {
+          "n": "is_manually_edited",
+          "l": "人工修订标记",
+          "t": "boolean",
+          "d": "生成后是否被用户人工修订过；为真时重新生成只产生新版本，不得静默覆盖用户改动（对应 H2）。",
+          "def": "false"
+        },
+        {
+          "n": "edited_sections",
+          "l": "人工修订段落",
+          "t": "json",
+          "d": "被人工修订的章节与字段清单，用于对比 AI 原稿与人工稿，并作为提示词优化的输入。"
+        },
+        {
+          "n": "export_records",
+          "l": "导出记录",
+          "t": "json",
+          "d": "导出记录：每次导出的格式、文件位置、时间与导出人（用户或 Agent），支撑 H3 的导出与迁移要求。"
+        }
+      ],
+      "rules": [
+        "`parent_material_id` 非空时 `version_no` 必须等于父版本 + 1，且父版本状态需为 confirmed/exported/archived 之一。",
+        "`is_manually_edited = true` 的材料重新生成时必须新建版本，禁止在同一记录上覆盖 `content`（对应 H2）。",
+        "`data_scope_snapshot` 必须列出取材实体与过滤条件；材料引用了该范围之外的实体时校验失败（对应 H1）。",
+        "`word_limit > 0` 且 `content` 超出上限时，确认动作应被拦截并提示精简。"
+      ],
+      "notes": [
+        "「目标岗位/用途」拆成 core 的 `target_position`（岗位）与本 part 的 `intended_usage`（具体用途），两者语义不同，不合并。",
+        "core 没有导出次数与最近导出时间字段，导出历史暂以 `export_records` JSON 承载；若需要按导出频次统计，建议再登记 `last_exported_at`。"
+      ]
+    },
+    {
+      "id": "material_citation",
+      "fields": [
+        {
+          "n": "paragraph_index",
+          "l": "正文段落序号",
+          "t": "integer",
+          "d": "引用对应的正文段落序号（从 1 开始）；section_key 只到章节时用本字段定位到段，实现点击跳转（对应 G4）。",
+          "min": 1
+        },
+        {
+          "n": "is_source_verified",
+          "l": "来源已核实",
+          "t": "boolean",
+          "d": "取材时被引记录是否已确认（review_status=confirmed，量化指标还需 is_verified），由生成程序写入，用于事后校验材料合规性（对应 F2）。",
+          "imm": true
+        },
+        {
+          "n": "verification_note",
+          "l": "核对说明",
+          "t": "text",
+          "d": "核对说明或差异记录（如「原文为提升 12%，材料写成 20%」），保留发现问题但尚未修正的线索。"
+        }
+      ],
+      "rules": [
+        "`is_source_verified = false` 的引用不得出现在简历、述职、晋升类材料的最终版本中，导出前校验拦截（对应 F2）。",
+        "`citation_type = metric` 时必须能通过 `cited_entity_id` 找到已核实的量化指标，否则该引用无效。",
+        "`is_user_verified = true` 时 `verified_at` 必填。"
+      ],
+      "notes": [
+        "`material_citation` 没有 origin/review 字段组，无法用通用字段表达「这条引用是否经用户核对」；本 part 用 `is_user_verified` + `verified_at` 补足，建议后续为该实体补 review 字段组。"
+      ]
+    },
+    {
+      "id": "ai_job",
+      "fields": [
+        {
+          "n": "duration_ms",
+          "l": "耗时毫秒",
+          "t": "integer",
+          "d": "作业耗时（毫秒），由执行引擎实测写入并包含排队与模型调用时间，不是 finished_at 与 started_at 的简单推算。",
+          "imm": true,
+          "min": 0
+        },
+        {
+          "n": "token_usage",
+          "l": "token 用量",
+          "t": "json",
+          "d": "token 用量：input / output / total 三段及计价单价口径，供成本核算与模型对比；未统计时为 null。",
+          "imm": true
+        },
+        {
+          "n": "cost_amount",
+          "l": "折算成本",
+          "t": "decimal",
+          "d": "本次作业折算成本，单位：元，按 token_usage 与模型单价计算；无计价配置时写 0，不得估算。",
+          "def": "0",
+          "imm": true,
+          "min": 0
+        },
+        {
+          "n": "input_fragment_count",
+          "l": "输入片段数",
+          "t": "integer",
+          "d": "本次作业实际送入模型的 source_fragment 条数，用于解释产出规模与费用，并判断输入是否被截断。",
+          "imm": true,
+          "min": 0
+        },
+        {
+          "n": "proposal_count",
+          "l": "产出建议数",
+          "t": "integer",
+          "d": "本次作业产出的 change_proposal 条数（不含被去重的候选），用于衡量产出质量与用户审核负担。",
+          "def": "0",
+          "min": 0
+        },
+        {
+          "n": "retry_count",
+          "l": "重试次数",
+          "t": "integer",
+          "d": "自动与手动重试的累计次数；大于 0 时需结合 error_code 分析失败模式，同一输入重试不得重复产生建议。",
+          "def": "0",
+          "min": 0
+        },
+        {
+          "n": "error_code",
+          "l": "失败分类码",
+          "t": "enum",
+          "d": "失败原因细化分类码，取值如 timeout / rate_limit / schema_invalid / content_filter / model_error；成功时为空，供聚合统计与重试策略。",
+          "e": "job_error_code"
+        },
+        {
+          "n": "parent_job_id",
+          "l": "原作业",
+          "t": "ref",
+          "ref": "ai_job",
+          "d": "重试或拆分时指向原作业，形成作业链，避免丢失失败尝试的上下文与已发生费用。",
+          "imm": true
+        }
+      ],
+      "rules": [
+        "`status` 为 succeeded/failed/cancelled 时 `duration_ms` 必须非空，且与 `finished_at - started_at` 的偏差不得超过 5%（差额为排队时间）。",
+        "`proposal_count` 必须与实际关联的 `change_proposal` 条数一致，作业结束后不允许手工修改。",
+        "`retry_count > 0` 时 `parent_job_id` 必须指向被重试的作业，且 `error_code` 非空。"
+      ],
+      "notes": [
+        "core 的 `error_message` 是自由文本、无法聚合统计；本 part 增加 `error_code` 作为可控分类码，其取值表建议像 job_status 一样登记为枚举（当前缺该枚举）。"
+      ]
+    },
+    {
+      "id": "change_proposal",
+      "fields": [
+        {
+          "n": "priority",
+          "l": "建议优先级",
+          "t": "integer",
+          "d": "建议优先级 1~5（1 最高），由 AI 按影响面与确定性给出、用户可调整；审核队列按本字段升序排列。",
+          "def": "3",
+          "idx": true,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "n": "impact_scope",
+          "l": "影响面评估",
+          "t": "json",
+          "d": "确认后会被连带影响的实体与下游产物（关联证据、画像、快照、已生成材料），用于审核页提前提示后果。",
+          "imm": true
+        },
+        {
+          "n": "final_payload",
+          "l": "最终写入值",
+          "t": "json",
+          "d": "用户修改后实际写入正式档案的最终值；status=modified 时必填，status=confirmed 时等于 proposed_payload，便于对比 AI 原建议与用户改动（对应 C3）。"
+        },
+        {
+          "n": "reviewed_at",
+          "l": "审核时间",
+          "t": "datetime",
+          "d": "用户处理该建议的时间（接受、修改、拒绝均记录）；与 applied_at 的区别是拒绝时只写本字段。"
+        },
+        {
+          "n": "review_duration_ms",
+          "l": "审核耗时",
+          "t": "integer",
+          "d": "审核耗时（毫秒），从建议创建到用户处理完成；用于评估审核负担与建议的可用性。",
+          "min": 0
+        },
+        {
+          "n": "superseded_by_id",
+          "l": "被替代建议",
+          "t": "ref",
+          "ref": "change_proposal",
+          "d": "本建议被哪条新建议取代；status=superseded 时必填，避免用户在过期建议上做决定（对应 C5）。"
+        }
+      ],
+      "rules": [
+        "`status = modified` 时 `final_payload` 必填且必须与 `proposed_payload` 存在差异；`status = confirmed` 时 `final_payload` 应等于 `proposed_payload`（对应 C3）。",
+        "同一 `target_entity_type` + `target_entity_id` 上已有 pending 建议时，新建议必须建立 `superseded_by_id` 关系并把旧建议置为 superseded（对应 C5）。",
+        "`status` 进入 confirmed/modified/rejected/superseded/expired 后不得回退为 pending（对应 C2）。",
+        "`status` 离开 pending 后 `reviewed_at` 必须非空，`review_duration_ms` 必须与创建时间一致。"
+      ],
+      "notes": [
+        "core 规则 C2 写的是 `pending → accepted / modified / rejected / superseded`，但枚举 `proposal_status` 的确认态取值是 `confirmed` 而不是 `accepted`；规则文本与枚举不一致，建议以枚举为准并修订规则文本。",
+        "规则 C1 未把 `material` 列为 ai_job 可写目标，但 `job_type` 已含 `material_generate`、`material.job_id` 也指向 ai_job；材料属产出物而非正式档案，建议在规则中显式豁免 material，仅受 H2 版本链与 material_status 约束。"
+      ]
+    },
+    {
+      "id": "proposal_evidence",
+      "fields": [
+        {
+          "n": "relevance_type",
+          "l": "与建议的关系",
+          "t": "enum",
+          "e": "relevance_type",
+          "d": "该片段对建议的作用：主要来源 primary_source、佐证 supporting、反证 contradicting、背景 context；反证必须与支持证据同等展示（对应 C4 与事实/推断分离）。",
+          "req": true,
+          "def": "primary_source"
+        },
+        {
+          "n": "quote_char_start",
+          "l": "原文起始下标",
+          "t": "integer",
+          "d": "引用原文在 source_fragment 中的起始字符下标（从 0 开始），用于审核界面高亮定位并一键跳回原文（对应 G4）。",
+          "min": 0
+        },
+        {
+          "n": "quote_char_end",
+          "l": "原文结束下标",
+          "t": "integer",
+          "d": "引用原文在 source_fragment 中的结束字符下标（不含），与 quote_char_start 一起构成高亮区间。",
+          "min": 0
+        }
+      ],
+      "rules": [
+        "`quote_char_end` 必须大于 `quote_char_start`，且区间不得超出所引 `source_fragment` 的字符范围（对应 A4）。",
+        "`quote` 必须与 `fragment_id` 所指片段对应字符区间的内容一致，禁止改写或概括原文（对应 A5）。"
+      ],
+      "notes": [
+        "core 没有字段区分「支持建议的片段」与「反证片段」，审核界面容易只呈现有利证据；本 part 用 `relevance_type` 复用 provenance_relation 枚举补足。"
+      ]
+    },
+    {
+      "id": "prompt_template",
+      "fields": [
+        {
+          "n": "target_models",
+          "l": "适用模型",
+          "t": "json",
+          "d": "适用模型清单（provider / model 及最低上下文长度要求），空表示通用；用于更换模型时判断模板是否仍然适用。"
+        },
+        {
+          "n": "output_format_note",
+          "l": "输出格式约束",
+          "t": "text",
+          "d": "输出格式约束的文字说明（如仅返回 JSON、不得用 Markdown 代码块包裹、字段顺序固定），与 output_schema 配合约束模型输出。"
+        },
+        {
+          "n": "eval_metrics",
+          "l": "评测与效果",
+          "t": "json",
+          "d": "评测与历史效果：历史调用次数、成功率、产出建议的平均采纳率、评测集得分；由统计任务定期回写，用于模板选型。"
+        },
+        {
+          "n": "applies_to_scopes",
+          "l": "启用范围",
+          "t": "json",
+          "d": "启用范围：适用的资料类型、实体类型或业务领域，空表示全局；同一 job_type 下多模板并存时用于路由选择。"
+        },
+        {
+          "n": "parent_template_id",
+          "l": "上一版本",
+          "t": "ref",
+          "ref": "prompt_template",
+          "d": "上一版本模板，形成版本链，便于对比提示词改动对产出质量的影响。"
+        }
+      ],
+      "rules": [
+        "同一 `job_type` 下 `is_active = true` 且 `applies_to_scopes` 完全相同的模板至多一条，否则校验失败（避免路由歧义）。",
+        "`output_schema` 与 `output_format_note` 不得冲突；schema 存在时以 schema 为准，文字说明只补充 schema 无法表达的部分。"
+      ],
+      "notes": [
+        "core 用 `version` 整数表达版本但没有版本链外键，无法直接比较同一模板两版的效果；本 part 用 `parent_template_id` 补齐。",
+        "缺少「适用模型」「启用范围」的结构化定义（枚举或实体），当前以 JSON 承载；建议约定固定键名（provider / model / min_context 与 document_type / entity_type / domain），否则无法程序化路由。"
+      ]
+    },
+    {
+      "id": "agent_workflow",
+      "fields": [
+        {
+          "n": "target_models",
+          "l": "适用模型",
+          "t": "json",
+          "d": "工作流适用的模型与能力要求（如需支持 function calling、上下文不少于 32k），空表示不限；用于跨模型迁移时校验可用性。"
+        },
+        {
+          "n": "output_constraints",
+          "l": "产出约束",
+          "t": "text",
+          "d": "各步骤产出的格式与校验约束（如最终步骤必须输出 change_proposal 结构、禁止直接写正式档案），供执行器在每步之后校验（对应 C1）。"
+        },
+        {
+          "n": "eval_metrics",
+          "l": "运行效果",
+          "t": "json",
+          "d": "历史运行效果：执行次数、成功率、平均耗时、产出建议采纳率、失败步骤分布；由统计任务回写，用于判断工作流是否该淘汰。"
+        },
+        {
+          "n": "applies_to_scopes",
+          "l": "启用范围",
+          "t": "json",
+          "d": "启用范围：适用的资料类型、实体类型与触发场景，空表示全局；同一 job_type 多工作流时用于路由。"
+        },
+        {
+          "n": "parent_workflow_id",
+          "l": "上一版本",
+          "t": "ref",
+          "ref": "agent_workflow",
+          "d": "上一版本工作流，形成版本链，便于回溯某次作业实际使用的步骤定义。"
+        },
+        {
+          "n": "default_prompt_template_id",
+          "l": "默认提示词模板",
+          "t": "ref",
+          "ref": "prompt_template",
+          "d": "默认提示词模板；steps 中未显式指定模板的步骤沿用该模板，避免逐步重复配置。"
+        }
+      ],
+      "rules": [
+        "同一 `job_type` 下 `is_active = true` 且 `applies_to_scopes` 相同的工作流至多一条。",
+        "`steps` 中出现的 `prompt_template_id` 必须指向 `is_active = true` 的模板，或与该工作流版本一并冻结，否则执行前校验失败。"
+      ],
+      "notes": [
+        "core 的 `steps` 是自由 JSON，缺少步骤级校验；建议在 steps 内固定键名（step_key / tool / prompt_template_id / output_key），否则 `output_constraints` 无法程序化校验。"
+      ]
+    },
+    {
+      "id": "agent_credential",
+      "fields": [
+        {
+          "n": "expires_at",
+          "l": "到期时间",
+          "t": "datetime",
+          "d": "凭证到期时间，到期后自动失效（调用返回未授权）；为空表示不设期限，但建议与 rotation_due_at 配合轮换。"
+        },
+        {
+          "n": "rate_limit_per_minute",
+          "l": "每分钟调用上限",
+          "t": "integer",
+          "d": "该凭证每分钟允许的调用次数上限，0 表示不限制；防止 Agent 批量调用把建议队列写爆。",
+          "def": "60",
+          "min": 0
+        },
+        {
+          "n": "usage_count",
+          "l": "累计调用次数",
+          "t": "integer",
+          "d": "该凭证累计成功调用次数，用于识别长期未使用或异常高频的接入方，辅助权限回收决策。",
+          "def": "0",
+          "min": 0
+        },
+        {
+          "n": "rotation_due_at",
+          "l": "建议轮换时间",
+          "t": "datetime",
+          "d": "建议轮换凭证的时间（如签发后 90 天），到期在管理页提示重新签发，避免长期使用同一令牌。"
+        },
+        {
+          "n": "revoke_reason",
+          "l": "吊销原因",
+          "t": "text",
+          "d": "吊销原因（如泄露、客户端下线、权限调整）；revoked_at 非空时必填，保留审计线索。"
+        }
+      ],
+      "rules": [
+        "`revoked_at` 非空时 `revoke_reason` 必填，且该凭证不得再触发新的 `ai_job`。",
+        "`expires_at` 必须晚于创建时间；到期凭证等同已吊销，仅保留 `last_used_at` 供审计。"
+      ],
+      "notes": [
+        "core 只存令牌哈希（做法正确），但缺少到期与轮换机制；本 part 用 `expires_at` 与 `rotation_due_at` 补齐，密钥明文仍不得落库（对应 C6）。",
+        "「是否只读」由 `scopes` 表达（C6 默认只读 + 提建议），本 part 不另设布尔字段，避免同一权限语义两处维护。"
+      ]
+    },
+    {
+      "id": "backup_record",
+      "fields": [
+        {
+          "n": "record_count",
+          "l": "记录总条数",
+          "t": "integer",
+          "d": "本次操作导出的记录总条数（数据量主口径），用于对比两次备份的规模差异与判断数据是否缺失。",
+          "imm": true,
+          "min": 0
+        },
+        {
+          "n": "size_bytes",
+          "l": "产物大小",
+          "t": "integer",
+          "d": "产物大小，单位：字节；用于容量规划与恢复耗时预估。",
+          "imm": true,
+          "min": 0
+        },
+        {
+          "n": "duration_ms",
+          "l": "操作耗时",
+          "t": "integer",
+          "d": "操作耗时（毫秒），由引擎实测写入，用于评估备份窗口与恢复演练可行性。",
+          "imm": true,
+          "min": 0
+        },
+        {
+          "n": "entity_counts",
+          "l": "分实体条数",
+          "t": "json",
+          "d": "分实体记录条数明细（实体 id → 条数），比总数更能说明数据量与缺失范围，也便于校验备份完整性。",
+          "imm": true
+        },
+        {
+          "n": "restore_verification",
+          "l": "恢复校验结果",
+          "t": "json",
+          "d": "恢复校验结果：校验方式（逐表条数比对、主键抽样、关联抽样）、通过率与失败明细；operation_type=restore 时必填，保证「备份可用」而非只是「备份成功」（对应 J9）。"
+        },
+        {
+          "n": "is_encrypted",
+          "l": "是否加密",
+          "t": "boolean",
+          "d": "产物是否加密存储；默认 false，含画像与评价等隐私内容时须为 true 才允许落到共享位置。",
+          "def": "false"
+        },
+        {
+          "n": "encryption_note",
+          "l": "加密方式说明",
+          "t": "string",
+          "d": "加密方式说明（算法、密钥标识或 KMS 引用）；只写引用，禁止在本字段保存密钥明文。"
+        }
+      ],
+      "rules": [
+        "`operation_type = restore` 时 `restore_verification` 必填，且 `checksum` 必须与源备份一致，否则 `status` 不得置为成功。",
+        "`record_count` 必须等于 `entity_counts` 各项之和；`size_bytes > 0` 时 `file_path` 不得为空（对应 J9）。",
+        "`is_encrypted = true` 时 `encryption_note` 必填，且内容不得包含密钥明文。"
+      ],
+      "notes": [
+        "「存储位置」由 core 已有 `file_path`（file 类型）表达，本 part 不重复定义位置字段。",
+        "core 未区分「备份产物位置」与「恢复输入来源」，恢复记录里的 file_path 指向被恢复的备份文件；若还需记录恢复后的目标库位置，建议再登记 `target_location`。"
+      ]
+    }
+  ]
+}

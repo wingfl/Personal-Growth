@@ -1,0 +1,281 @@
+{
+  "name": "资料内容提取（工作事项与项目识别）",
+  "job_type": "document_extract",
+  "version": 1,
+  "provider": "neorigin",
+  "is_active": true,
+  "system_prompt": "你是一个个人成长档案的整理助手。用户把工作资料的原文片段交给你，你要从中识别出「工作事项」，以及这些事项所属的项目、系统、功能模块、工作领域，并按约定结构输出 JSON。\n\n硬性约束：\n1. 只输出 JSON 对象本身，不要输出解释、不要用 Markdown 代码块包裹。\n2. 只用原文里真实出现的信息。原文没有写的内容留空或省略，不补充、不猜测、不编造数字与指标。\n3. 每一条产出都必须给出 evidence：引用原文片段 id（fragment_id）与该片段中的关键原句（quote）；引用不到原文的产出不要输出。\n4. 如果某条内容是归纳推断（原文没有直接说），必须把 is_fact 设为 false，并在 fact_basis 里写清推断依据。\n5. 时间只取原文写明的日期；原文没写具体日期时用资料期间与对应精度（day/week/month/quarter/year/unknown），不要臆造精确日期。\n6. 「档案里已有的记录」里已经存在的项目、系统、模块、领域，直接使用它的准确名称，不要再造新记录；确实没出现过的才放进 new_* 里。\n7. 不评价用户的能力、性格或表现，只整理事实。\n8. 事实、推断、评价必须分开表达：评价性内容不要写进 content，可放进 notes。\n9. 如果这份资料整体属于档案里某条已有记录（例如某个项目的复盘、某个系统的建设记录），请在 link_existing 里用该记录的准确名称列出它，不要重复放进 new_*。",
+  "user_prompt_template": "【本次资料】\n标题：{document_title}\n类型：{doc_type}\n期间：{period_start} ~ {period_end}（期间精度：{period_precision}）\n片段数：{fragment_count}\n\n【原文片段】\n{fragments}\n\n【档案里已有的记录】\n已有项目：{existing_projects}\n已有系统：{existing_systems}\n已有功能模块：{existing_modules}\n已有工作领域：{existing_domains}\n已有工作事项（最近 {existing_item_count} 条）：{existing_items}\n\n【取值口径】\nitem_type 只能取：{item_type_values}\nproject_type 只能取：{project_type_values}\nsystem_type 只能取：{system_type_values}\nproject_status 只能取：{project_status_values}\nsystem_status 只能取：{system_status_values}\nmodule_type 只能取：{module_type_values}\nrole_type 只能取：{role_type_values}\ndate_precision 只能取：{date_precision_values}\ndeliverables、collaborators 是数组字段，必须输出 JSON 数组（例如 [\"指标定义模板\", \"12 个核心指标定义\"]），不要写成用分号拼接的一句话。\n\n【输出结构】\n{\n  \"items\": [\n    {\n      \"title\": \"一句话标题，说明做了什么（必填）\",\n      \"item_type\": \"item_type 取值之一（必填）：requirement_analysis / solution_design / development / testing / release / operations / issue_handling / communication / documentation / review / research / coordination / management / other\",\n      \"content\": \"这件事的问题背景、过程与结果，尽量用原文措辞（必填）\",\n      \"occurred_at\": \"YYYY-MM-DD；取原文写明的日期，原文没有日期时用资料期间起点\",\n      \"date_precision\": \"day / week / month / quarter / year / unknown\",\n      \"project\": \"已有项目名称，或本次 new_projects 里的名称；没有就省略\",\n      \"system\": \"同上，系统名称\",\n      \"module\": \"同上，功能模块名称\",\n      \"domain\": \"工作领域名称\",\n      \"my_role\": \"role_type 取值之一：lead / owner / core / participant / support / observer；原文能看出「我」的角色时才填\",\n      \"complexity_level\": \"1~5 的整数；能从原文判断复杂度时才填\",\n      \"is_routine\": \"true / false，是否例行事务\",\n      \"effort_hours\": \"数字；原文写了工时或人天才填\",\n      \"deliverables\": [\"交付物名称\"],\n      \"collaborators\": [\"协作方\"],\n      \"is_fact\": \"true / false\",\n      \"fact_basis\": \"is_fact=false 时必填，写清推断依据\",\n      \"evidence\": [{\"fragment_id\": \"片段 id\", \"quote\": \"该片段中的关键原句\",\n                    \"relevance_type\": \"primary_source / supporting / contradicting / context\"}]\n    }\n  ],\n  \"new_projects\": [{\"name\": \"项目名称\", \"project_type\": \"new_build / enhancement / maintenance / research / process / support / other\",\n                    \"my_role\": \"lead / owner / core / participant / support / observer\", \"domain\": \"工作领域名称\",\n                    \"status\": \"planning / active / launched / maintaining / closed / paused / unknown\",\n                    \"background\": \"为什么做，依据原文\", \"goal\": \"目标，依据原文\",\n                    \"start_date\": \"YYYY-MM-DD\", \"evidence\": []}],\n  \"new_systems\": [{\"name\": \"系统名称\", \"system_type\": \"business_system / product / platform / middle_platform / tool / data_system / other\",\n                   \"status\": \"planning / building / online / maintaining / offline / unknown\", \"evidence\": []}],\n  \"new_modules\": [{\"name\": \"模块名称\", \"system\": \"所属系统名称\",\n                   \"module_type\": \"core / business / technical / admin / data / other\", \"evidence\": []}],\n  \"new_domains\": [{\"name\": \"工作领域名称\"}],\n  \"link_existing\": [\n    {\"entity\": \"project / business_system / function_module / work_domain / work_item\",\n     \"name\": \"档案里已有记录的准确名称（必须与【档案里已有的记录】里的写法一致）\",\n     \"reason\": \"为什么这份资料属于这条已有记录，一句话\",\n     \"evidence\": [{\"fragment_id\": \"片段 id\", \"quote\": \"关键原句\"}]}\n  ],\n  \"notes\": \"本次提取中不确定、需要用户确认的地方；没有就留空字符串\"\n}",
+  "variables": [
+    {
+      "name": "document_title",
+      "desc": "资料标题"
+    },
+    {
+      "name": "doc_type",
+      "desc": "资料类型（document_type 枚举）"
+    },
+    {
+      "name": "period_start",
+      "desc": "资料期间起点，可为空"
+    },
+    {
+      "name": "period_end",
+      "desc": "资料期间终点，可为空"
+    },
+    {
+      "name": "period_precision",
+      "desc": "期间精度（date_precision 枚举）"
+    },
+    {
+      "name": "fragment_count",
+      "desc": "送入模型的片段条数"
+    },
+    {
+      "name": "fragments",
+      "desc": "片段列表，每行「片段id | 标题路径 | 原文」"
+    },
+    {
+      "name": "existing_projects",
+      "desc": "档案里已有项目名称列表"
+    },
+    {
+      "name": "existing_systems",
+      "desc": "档案里已有系统名称列表"
+    },
+    {
+      "name": "existing_modules",
+      "desc": "档案里已有功能模块名称列表"
+    },
+    {
+      "name": "existing_domains",
+      "desc": "档案里已有工作领域名称列表"
+    },
+    {
+      "name": "existing_item_count",
+      "desc": "已有工作事项条数"
+    },
+    {
+      "name": "existing_items",
+      "desc": "已有工作事项摘要列表，用于避免重复录入"
+    },
+    {
+      "name": "item_type_values",
+      "desc": "item_type 枚举可选值"
+    },
+    {
+      "name": "project_type_values",
+      "desc": "project_type 枚举可选值"
+    },
+    {
+      "name": "system_type_values",
+      "desc": "system_type 枚举可选值"
+    },
+    {
+      "name": "module_type_values",
+      "desc": "module_type 枚举可选值"
+    },
+    {
+      "name": "role_type_values",
+      "desc": "role_type 枚举可选值"
+    },
+    {
+      "name": "date_precision_values",
+      "desc": "date_precision 枚举可选值"
+    },
+    {
+      "name": "project_status_values",
+      "desc": "project_status 枚举可选值"
+    },
+    {
+      "name": "system_status_values",
+      "desc": "system_status 枚举可选值"
+    }
+  ],
+  "output_schema": {
+    "type": "object",
+    "required": [
+      "items"
+    ],
+    "properties": {
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "title",
+            "item_type",
+            "content",
+            "evidence"
+          ],
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "item_type": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            },
+            "occurred_at": {
+              "type": "string"
+            },
+            "date_precision": {
+              "type": "string"
+            },
+            "project": {
+              "type": "string"
+            },
+            "system": {
+              "type": "string"
+            },
+            "module": {
+              "type": "string"
+            },
+            "domain": {
+              "type": "string"
+            },
+            "my_role": {
+              "type": "string"
+            },
+            "complexity_level": {
+              "type": "integer"
+            },
+            "is_routine": {
+              "type": "boolean"
+            },
+            "effort_hours": {
+              "type": "number"
+            },
+            "deliverables": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "collaborators": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "is_fact": {
+              "type": "boolean"
+            },
+            "fact_basis": {
+              "type": "string"
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "fragment_id"
+                ],
+                "properties": {
+                  "fragment_id": {
+                    "type": "string"
+                  },
+                  "quote": {
+                    "type": "string"
+                  },
+                  "relevance_type": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "new_projects": {
+        "type": "array"
+      },
+      "new_systems": {
+        "type": "array"
+      },
+      "new_modules": {
+        "type": "array"
+      },
+      "new_domains": {
+        "type": "array"
+      },
+      "notes": {
+        "type": "string"
+      },
+      "link_existing": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "entity",
+            "name"
+          ],
+          "properties": {
+            "entity": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "output_format_note": "仅返回 JSON 对象；不得用 Markdown 代码块包裹；只用原文涉及的内容；每条产出必须带 evidence.fragment_id；枚举取值只能取上面列出的值；数组字段必须用 JSON 数组；link_existing 只列档案里已有的记录。",
+  "applies_to_scopes": [
+    "document_type: any"
+  ],
+  "workflow": {
+    "name": "资料 → 工作事项提取（人工触发）",
+    "job_type": "document_extract",
+    "description": "把已导入资料的片段交给模型，产出待审核的项目与工作事项建议；用户确认后才写入正式档案。",
+    "steps": [
+      {
+        "step": 1,
+        "name": "汇总资料片段",
+        "tool": "store.list(source_fragment)",
+        "output": "片段列表（id / 标题路径 / 原文）"
+      },
+      {
+        "step": 2,
+        "name": "汇总已有档案命名",
+        "tool": "archive 查询",
+        "output": "已有项目 / 系统 / 模块 / 领域 / 事项名称，避免重复录入"
+      },
+      {
+        "step": 3,
+        "name": "调用模型提取",
+        "tool": "llm.chat",
+        "prompt_template": "资料内容提取（工作事项与项目识别） v1",
+        "output": "约定结构的 JSON"
+      },
+      {
+        "step": 4,
+        "name": "落库为待审核建议",
+        "tool": "change_proposal + proposal_evidence",
+        "output": "status=pending 的建议与原文证据",
+        "detail": "；已有的项目/系统/模块用 link 建议补来源，不新建记录"
+      }
+    ],
+    "output_constraints": "只允许产出 change_proposal 与 proposal_evidence；禁止直接写 project / business_system / function_module / work_item 等正式档案；确认动作由用户在审核环节执行（对应规则 C1）。",
+    "target_models": [
+      "deepseek-v4-1-flash",
+      "deepseek-v4-pro"
+    ],
+    "applies_to_scopes": [
+      "document_type: weekly_report / monthly_report / work_summary / project_doc / system_record / work_log / achievement_note / personal_note / requirement_doc / product_plan / other"
+    ]
+  }
+}
