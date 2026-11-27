@@ -38,6 +38,18 @@ _META = re.compile(r"(已有成果描述[^。；]*[。；]?|做到的程度[^。
 _RISKY_NUMBER = re.compile(r"\d+(?:\.\d+)?\s*%|\d+\s*%|￥\s*\d|\d+\s*万|\d+\s*人|\d+\s*个(?!月)")
 
 
+def strip_number_sentences(text):
+    """把带没给过的量（百分比/金额/人数）的句子整句去掉，保留其余事实陈述。"""
+    kept = []
+    for sentence in re.split(r"(?<=[。；])", text or ""):
+        if not sentence.strip():
+            continue
+        if _RISKY_NUMBER.search(sentence):
+            continue
+        kept.append(sentence)
+    return "".join(kept).strip()
+
+
 def has_fabricated_numbers(text):
     """出现百分比、金额、人数这类没给过的量，就不要用它。"""
     return bool(_RISKY_NUMBER.search(text or ""))
@@ -124,11 +136,12 @@ class ProjectCurator:
         f = self.facts(project)
         if not f["titles"]:
             return ""
-        span = "至".join(x for x in (f["start"], f["end"]) if x)
-        head = "「%s」是 %s 的项目" % (f["name"], span or "未注明起止时间")
-        body = "档案中有 %d 条相关记录，主要围绕：%s" % (
-            f["count"], "、".join(f["titles"][:6]))
-        return head + "；" + body + "。"
+        span = " 至 ".join(x for x in (f["start"], f["end"]) if x)
+        head = "「%s」%s" % (f["name"], span or "未注明起止时间")
+        sample = "、".join(f["titles"][:3])
+        tail = "等" if f["count"] > 3 else ""
+        body = "档案中有 %d 条记录，涉及%s%s。" % (f["count"], sample, tail)
+        return head + "，" + body
 
     def generate(self, project, model=None, temperature=0.3):
         f = self.facts(project)
@@ -152,7 +165,8 @@ class ProjectCurator:
         except LLMError:
             return self.draft(project)
         text = clean_intro((reply.text or "").strip().strip('"'), f["name"])
-        if not text or has_fabricated_numbers(text):
+        text = strip_number_sentences(text)
+        if len(text) < 15:
             return self.draft(project)
         return text
 
