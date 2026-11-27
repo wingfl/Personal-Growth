@@ -23,4 +23,5 @@
 | `_patch_cli_feishu.py` | CLI 增加 `feishu` 命令组 |
 | `_patch_oauth.py` | 飞书用户身份 OAuth 接线（客户端用户令牌、身份模式、`feishu auth/whoami/logout`） |
 | `_patch_readme_feishu.py` | README 增加飞书同步小节 |
+| `_patch_docx_stdlib.py` | 把 .docx 解析从 python-docx 换成标准库 zipfile + xml.etree（消除产品代码里最后的第三方依赖） |
 | `patch_prompt_v1.py` | 提示词 v1 增补 link_existing 分节与数组字段口径 |

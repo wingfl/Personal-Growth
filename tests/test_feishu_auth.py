@@ -55,7 +55,7 @@ def token_payload(access="u-token-1", refresh="r-token-1", expires_in=7200, scop
 
 
 def make_config():
-    return FeishuConfig("cli_aa5da4127eb81cf1", "secret", "https://open.feishu.cn", 5, "test")
+    return FeishuConfig("cli_selftest00000001", "secret", "https://open.feishu.cn", 5, "test")
 
 
 class TempHomeCase(unittest.TestCase):
@@ -80,7 +80,7 @@ class AuthorizeUrlTest(TempHomeCase):
         parsed = urllib.parse.urlparse(url)
         query = urllib.parse.parse_qs(parsed.query)
         self.assertEqual(parsed.netloc, "accounts.feishu.cn")
-        self.assertEqual(query["client_id"], ["cli_aa5da4127eb81cf1"])
+        self.assertEqual(query["client_id"], ["cli_selftest00000001"])
         self.assertEqual(query["redirect_uri"], [DEFAULT_REDIRECT_URI])
         self.assertEqual(query["state"], ["st-1"])
         self.assertEqual(query["scope"], [" ".join(DEFAULT_SCOPES)])

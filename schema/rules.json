@@ -537,7 +537,9 @@
           "id": "J5",
           "text": "枚举字段一律受 `enums` 定义约束，禁止写自由文本；需要扩展取值时必须显式登记枚举，旧值保留兼容。",
           "refs": [
-            "enums"
+            "origin",
+            "review_status",
+            "date_precision"
           ]
         },
         {
